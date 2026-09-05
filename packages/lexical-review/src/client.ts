@@ -1,4 +1,16 @@
 "use client";
 
-export { ReviewTextPlugin } from "./LexicalReviewTextPlugin";
-export { registerReviewText } from "./registerReviewText";
+export { ReviewTextPlugin as LegacyReviewTextPlugin } from "./LexicalReviewTextPlugin";
+export { ReviewSessionPlugin } from "./ReviewSessionPlugin";
+export { registerReviewText as registerLegacyReviewText } from "./registerReviewText";
+export {
+  registerReviewSession,
+  type ReviewSessionRegistrationOptions,
+} from "./registerReviewSession";
+export type {
+  ReviewIntentError,
+  ReviewIntentOutcome,
+  ReviewIntentRefusal,
+  ReviewIntentRefusalCode,
+  ReviewProposalIdFactory,
+} from "./registerReviewSession";

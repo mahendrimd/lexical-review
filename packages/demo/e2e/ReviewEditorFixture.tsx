@@ -10,12 +10,12 @@ import {
   TextNode,
 } from "lexical";
 import {
-  $createReviewTextNode,
-  $isReviewTextNode,
-  ReviewTextNode,
-  type TextReviewType,
+  $createLegacyReviewTextNode as $createReviewTextNode,
+  $isLegacyReviewTextNode as $isReviewTextNode,
+  LegacyReviewTextNode as ReviewTextNode,
+  type LegacyTextReviewType as TextReviewType,
 } from "lexical-review";
-import { ReviewTextPlugin } from "lexical-review/client";
+import { LegacyReviewTextPlugin as ReviewTextPlugin } from "lexical-review/client";
 import type {
   NativeCaret,
   ReviewEditorFixtureApi,

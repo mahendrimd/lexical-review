@@ -1,4 +1,15 @@
 import { createRoot } from "react-dom/client";
 import ReviewEditorFixture from "./ReviewEditorFixture";
 
-createRoot(document.getElementById("root")!).render(<ReviewEditorFixture />);
+import { DeletionFixture } from "./DeletionFixture";
+import { InsertionFixture } from "./InsertionFixture";
+
+createRoot(document.getElementById("root")!).render(
+  location.search === "?deletions" ? (
+    <DeletionFixture />
+  ) : location.search === "?insertions" ? (
+    <InsertionFixture />
+  ) : (
+    <ReviewEditorFixture />
+  ),
+);

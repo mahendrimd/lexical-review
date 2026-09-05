@@ -10,10 +10,9 @@ export function ReviewTextPlugin({
   granularity?: "word" | "character";
 }) {
   const [editor] = useLexicalComposerContext();
-  useEffect(
-    () => registerReviewText(editor, granularity),
-    [editor, granularity],
-  );
+  useEffect(() => {
+    return registerReviewText(editor, granularity);
+  }, [editor, granularity]);
 
   return <>{contentEditable}</>;
 }

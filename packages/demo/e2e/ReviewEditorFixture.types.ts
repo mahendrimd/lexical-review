@@ -1,4 +1,4 @@
-import type { TextReviewType } from "lexical-review";
+import type { LegacyTextReviewType as TextReviewType } from "lexical-review";
 
 export type ReviewEditorScenario =
   | "insertion-boundary"
