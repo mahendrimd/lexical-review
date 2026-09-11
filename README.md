@@ -18,16 +18,16 @@ See the [session API](packages/lexical-review/README.md#pending-insertion-propos
 
 ## Installation
 
-The package declares Lexical peer compatibility `>=0.45.0 <0.50.0`.
+The package declares Lexical peer compatibility `>=0.47.0 <0.51.0`.
 The `lexical`, `@lexical/react`, `@lexical/clipboard`, and `@lexical/utils`
 packages must use the same version:
 
 ```bash
 npm install lexical-review \
-  'lexical@>=0.45.0 <0.50.0' \
-  '@lexical/react@>=0.45.0 <0.50.0' \
-  '@lexical/clipboard@>=0.45.0 <0.50.0' \
-  '@lexical/utils@>=0.45.0 <0.50.0' \
+  'lexical@>=0.47.0 <0.51.0' \
+  '@lexical/react@>=0.47.0 <0.51.0' \
+  '@lexical/clipboard@>=0.47.0 <0.51.0' \
+  '@lexical/utils@>=0.47.0 <0.51.0' \
   react react-dom
 ```
 
@@ -103,8 +103,8 @@ pnpm --filter lexical-review build
 pnpm lint
 pnpm compatibility               # run configured Lexical compatibility checks
 pnpm compatibility -- --version 0.48.0 # run a focused exact-version lane
-pnpm compatibility:e2e -- --version 0.45.0 --react-version 19.2.3
-pnpm compatibility:e2e -- --version 0.45.0 --react-version 18.3.1 --project chromium
+pnpm compatibility:e2e -- --version 0.47.0 --react-version 19.2.3
+pnpm compatibility:e2e -- --version 0.47.0 --react-version 18.3.1 --project chromium
 ```
 
 The Lexical compatibility workflow can also be dispatched with an exact

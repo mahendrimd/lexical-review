@@ -4,16 +4,16 @@
 
 ```bash
 npm install lexical-review \
-  'lexical@>=0.45.0 <0.50.0' \
-  '@lexical/react@>=0.45.0 <0.50.0' \
-  '@lexical/clipboard@>=0.45.0 <0.50.0' \
-  '@lexical/utils@>=0.45.0 <0.50.0' \
+  'lexical@>=0.47.0 <0.51.0' \
+  '@lexical/react@>=0.47.0 <0.51.0' \
+  '@lexical/clipboard@>=0.47.0 <0.51.0' \
+  '@lexical/utils@>=0.47.0 <0.51.0' \
   react react-dom
 ```
 
 ## Compatibility
 
-The package declares Lexical peer compatibility `>=0.45.0 <0.50.0`.
+The package declares Lexical peer compatibility `>=0.47.0 <0.51.0`.
 `lexical`, `@lexical/react`, `@lexical/clipboard`, and `@lexical/utils` must
 be installed at the same version within that range.
 
