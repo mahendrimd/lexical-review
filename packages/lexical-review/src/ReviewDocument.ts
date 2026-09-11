@@ -374,9 +374,7 @@ function validateReviewNode(
       );
     }
     if (
-      !accepted.every((run) =>
-        isSupportedFormat((run as JsonRecord).format),
-      )
+      !accepted.every((run) => isSupportedFormat((run as JsonRecord).format))
     ) {
       return unsupported(
         `${path}.accepted`,
@@ -422,9 +420,7 @@ function sameFormatRunList(
     }
     return result;
   };
-  return (
-    JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))
-  );
+  return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
 }
 
 function validateParagraphNode(
@@ -630,7 +626,10 @@ export function validateReviewDocument(
     children.forEach((child, index) => {
       if (!isRecord(child)) return;
       const childPath = `$.root.children[${p}].children[${index}]`;
-      if (child.type === "review-deletion" && typeof child.proposalId === "string") {
+      if (
+        child.type === "review-deletion" &&
+        typeof child.proposalId === "string"
+      ) {
         const sides = replacementSides.get(child.proposalId) ?? {
           delText: "",
           insText: "",
@@ -641,7 +640,10 @@ export function validateReviewDocument(
           .join("");
         replacementSides.set(child.proposalId as string, sides);
       }
-      if (child.type === "review-insertion" && typeof child.proposalId === "string") {
+      if (
+        child.type === "review-insertion" &&
+        typeof child.proposalId === "string"
+      ) {
         const sides = replacementSides.get(child.proposalId) ?? {
           delText: "",
           insText: "",

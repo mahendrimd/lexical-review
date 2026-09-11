@@ -355,7 +355,11 @@ describe("node-backed ReviewDocumentV3", () => {
       "formatting with accepted runs",
       reviewDocument([
         paragraph([
-          formattingNode("fmt-a", [text("new", 1)], [{ format: 0, text: "new" }]),
+          formattingNode(
+            "fmt-a",
+            [text("new", 1)],
+            [{ format: 0, text: "new" }],
+          ),
         ]),
       ]),
     ],
@@ -430,9 +434,7 @@ describe("node-backed ReviewDocumentV3", () => {
     ],
     [
       "split in first paragraph",
-      reviewDocument([
-        paragraph([boundaryNode("spl-a", "split"), text("AB")]),
-      ]),
+      reviewDocument([paragraph([boundaryNode("spl-a", "split"), text("AB")])]),
       "$.root.children[0]",
       "[invalid-structural-target]",
     ],
@@ -484,21 +486,18 @@ describe("node-backed ReviewDocumentV3", () => {
       "$.root.children",
       "[unsafe-proposal-intersection]",
     ],
-  ])(
-    "refuses %s with the matrix-mapped code",
-    (_name, input, path, code) => {
-      expect(validateReviewDocument(input)).toMatchObject({
-        issues: [{ code: "invalid-document", path }],
-        status: "invalid",
-      });
-      const result = validateReviewDocument(input);
-      expect(result.status).toBe("invalid");
-      if (result.status !== "invalid") {
-        return;
-      }
-      expect(result.issues[0]?.message).toContain(code);
-    },
-  );
+  ])("refuses %s with the matrix-mapped code", (_name, input, path, code) => {
+    expect(validateReviewDocument(input)).toMatchObject({
+      issues: [{ code: "invalid-document", path }],
+      status: "invalid",
+    });
+    const result = validateReviewDocument(input);
+    expect(result.status).toBe("invalid");
+    if (result.status !== "invalid") {
+      return;
+    }
+    expect(result.issues[0]?.message).toContain(code);
+  });
 
   it.each([
     [
@@ -514,7 +513,11 @@ describe("node-backed ReviewDocumentV3", () => {
       "accepted-equal formatting",
       reviewDocument([
         paragraph([
-          formattingNode("fmt-a", [text("same", 1)], [{ format: 1, text: "same" }]),
+          formattingNode(
+            "fmt-a",
+            [text("same", 1)],
+            [{ format: 1, text: "same" }],
+          ),
         ]),
       ]),
     ],
@@ -539,7 +542,12 @@ describe("node-backed ReviewDocumentV3", () => {
       ]),
     ]);
     expect(validateReviewDocument(input)).toMatchObject({
-      issues: [{ code: "invalid-document", path: "$.root.children[0].children[0].accepted" }],
+      issues: [
+        {
+          code: "invalid-document",
+          path: "$.root.children[0].children[0].accepted",
+        },
+      ],
       status: "invalid",
     });
   });
@@ -570,9 +578,11 @@ describe("node-backed ReviewDocumentV3", () => {
       () =>
         reviewDocument([
           paragraph([
-            formattingNode("fmt-a", [text("new", 1)], [
-              { format: 16, text: "new" },
-            ]),
+            formattingNode(
+              "fmt-a",
+              [text("new", 1)],
+              [{ format: 16, text: "new" }],
+            ),
           ]),
         ]),
     ],
@@ -587,9 +597,17 @@ describe("node-backed ReviewDocumentV3", () => {
 
   it.each([
     ["wrong Lexical node version", "$.root", "invalid-document"] as const,
-    ["wrong native doc version", "$.root.$.lexical-review.version", "unsupported-document"] as const,
+    [
+      "wrong native doc version",
+      "$.root.$.lexical-review.version",
+      "unsupported-document",
+    ] as const,
     ["missing review metadata", "$.root.$", "invalid-document"] as const,
-    ["non-array extensions", "$.root.$.lexical-review.extensions", "invalid-document"] as const,
+    [
+      "non-array extensions",
+      "$.root.$.lexical-review.extensions",
+      "invalid-document",
+    ] as const,
   ])("splits %s taxonomy correctly", (_name, path, code) => {
     const input = reviewDocument([paragraph([text("Alpha")])]);
     if (_name === "wrong Lexical node version") {
@@ -610,7 +628,10 @@ describe("node-backed ReviewDocumentV3", () => {
     }
     const result = validateReviewDocument(input);
     if (code === "invalid-document") {
-      expect(result).toMatchObject({ issues: [{ code, path }], status: "invalid" });
+      expect(result).toMatchObject({
+        issues: [{ code, path }],
+        status: "invalid",
+      });
     } else {
       expect(result).toMatchObject({
         reason: { code, path },

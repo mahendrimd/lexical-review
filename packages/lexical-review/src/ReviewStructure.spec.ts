@@ -421,7 +421,9 @@ it("rejects malformed native boundary placement and identity before installing s
     const malformed = structuredClone(saved.value);
     (
       malformed as unknown as {
-        root: { children: Array<{ children: Array<{ rightFormat?: number }> }> };
+        root: {
+          children: Array<{ children: Array<{ rightFormat?: number }> }>;
+        };
       }
     ).root.children[1]!.children[0]!.rightFormat = 16;
     const before = editor.getEditorState();
