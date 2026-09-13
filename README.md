@@ -87,6 +87,9 @@ export function ReviewEditor() {
 
 ## Development
 
+Read [How Lexical Review works](ARCHITECTURE.md) for state ownership, the
+interaction lifecycle, and the contracts that guide implementation changes.
+
 The repository requires Node `^22.13.0` or `>=24` and pnpm `11`.
 
 ```bash

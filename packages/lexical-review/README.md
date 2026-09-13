@@ -1,5 +1,9 @@
 # lexical-review
 
+See the [proposal behavior contract](../../docs/proposal-behavior.md) for proposal
+kinds, identity-preserving edits, cancellation, and resolution. This guide
+provides API usage and integration details.
+
 ## Installation
 
 ```bash
