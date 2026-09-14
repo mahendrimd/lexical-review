@@ -17,7 +17,10 @@ import {
 } from "./ReviewText";
 import type { ReviewAuthoringOptions } from "./ReviewAuthoring";
 import { refusal, unchanged, type ReviewIntentOutcome } from "./ReviewIntent";
-import { inspectReviewTarget } from "./ReviewTargeting";
+import {
+  inspectDirectionalDeletionTarget,
+  inspectReviewTarget,
+} from "./ReviewTargeting";
 
 /**
  * Intent dispatch: classify once, then run kind claims in explicit
@@ -50,7 +53,14 @@ export function $deleteReviewText(
   }
   const inspection = inspectReviewTarget();
   if (inspection.status !== "ready") {
-    return inspection;
+    // Explicit narrow path (#85): only the element-boundary ambiguity is
+    // eligible for directional deletion; every other refusal passes through
+    // untouched. Non-qualifying element carets keep their refusal because the
+    // directional inspection admits them only beside accepted text.
+    if (inspection.code !== "ambiguous-boundary") return inspection;
+    const directional = inspectDirectionalDeletionTarget(backward);
+    if (directional === null) return inspection;
+    return $claimTextDeletion(directional, backward, options);
   }
   return $claimTextDeletion(inspection.value, backward, options);
 }

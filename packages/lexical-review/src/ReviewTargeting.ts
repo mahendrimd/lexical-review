@@ -519,6 +519,39 @@ export type ReviewTarget =
   | ProposalCaretTarget
   | ProposalRangeTarget;
 
+/**
+ * Directional deletion entry for collapsed paragraph element carets (#85).
+ * Returns the accepted-side caret at the same visual position when the child
+ * in the deletion direction is supported accepted text, else null. Null also
+ * covers every guard failure, so all refusals stay owned by the existing
+ * paths and this function is a pure allow-list with no refusal precedence.
+ */
+export function inspectDirectionalDeletionTarget(
+  backward: boolean,
+): AcceptedCaretTarget | null {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+  if (selection.anchor.type !== "element" || selection.focus.type !== "element")
+    return null;
+  if (selection.anchor.key !== selection.focus.key) return null;
+  const node = selection.anchor.getNode();
+  if (!isRootParagraph(node)) return null;
+  if (validateSelectionFormatting(selection) !== null) return null;
+  if (validateParagraphStructure(node) !== null) return null;
+  const childIndex = selection.anchor.offset;
+  const neighbor = node.getChildAtIndex(backward ? childIndex - 1 : childIndex);
+  if (!$isTextNode(neighbor) || neighbor.getTextContentSize() === 0)
+    return null;
+  return {
+    kind: "accepted-caret",
+    paragraph: node,
+    node: neighbor,
+    offset: backward ? neighbor.getTextContentSize() : 0,
+    childIndex: backward ? childIndex - 1 : childIndex,
+    selection,
+  };
+}
+
 /** Classify the live selection into one interaction target; maps stay inside. */
 export function inspectReviewTarget(): Preparation<ReviewTarget> {
   const inspection = inspectSelection();

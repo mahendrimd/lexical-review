@@ -489,7 +489,7 @@ describe("node-backed review session targeting", () => {
     },
   );
 
-  it("refuses zero-length deletion adjacency without moving selection", async () => {
+  it("extends a pending deletion backward across its start", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
@@ -510,8 +510,6 @@ describe("node-backed review session targeting", () => {
       }
       firstText(deletion).select(0, 0);
     });
-    const beforeSelection = editor.getEditorState().read(liveSelection);
-    const beforeDocument = editor.getEditorState().toJSON();
 
     expect(
       editor.dispatchCommand(
@@ -521,17 +519,23 @@ describe("node-backed review session targeting", () => {
     ).toBe(true);
     await Promise.resolve();
 
-    expect(outcomes).toMatchObject([
-      { code: "deletion-target-unavailable", status: "refused" },
-    ]);
-    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    editor.getEditorState().read(() => {
+      expect(firstParagraph().getTextContent()).toBe("ABCD");
+      const deletion = firstParagraph().getChildAtIndex(0);
+      if (!$isElementNode(deletion)) {
+        throw new Error("Expected a deletion wrapper.");
+      }
+      expect(deletion.getTextContent()).toBe("ABC");
+    });
+    expect(editor.getEditorState().read(liveSelection)).toMatchObject({
+      anchor: { offset: 0, type: "element" },
+      focus: { offset: 0, type: "element" },
+    });
     unregister();
   });
 
-  it("refuses forward deletion at the end of a pending deletion", async () => {
+  it("extends a pending deletion forward across its end", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
@@ -551,21 +555,25 @@ describe("node-backed review session targeting", () => {
         2,
       );
     });
-    const beforeSelection = editor.getEditorState().read(liveSelection);
-    const beforeDocument = editor.getEditorState().toJSON();
 
     expect(
       editor.dispatchCommand(KEY_DELETE_COMMAND, new KeyboardEvent("keydown")),
     ).toBe(true);
     await Promise.resolve();
 
-    expect(outcomes).toMatchObject([
-      { code: "deletion-target-unavailable", status: "refused" },
-    ]);
-    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    editor.getEditorState().read(() => {
+      expect(firstParagraph().getTextContent()).toBe("ABCD");
+      const deletion = firstParagraph().getChildAtIndex(1);
+      if (!$isElementNode(deletion)) {
+        throw new Error("Expected a deletion wrapper.");
+      }
+      expect(deletion.getTextContent()).toBe("BCD");
+    });
+    expect(editor.getEditorState().read(liveSelection)).toMatchObject({
+      anchor: { offset: 2, type: "element" },
+      focus: { offset: 2, type: "element" },
+    });
     unregister();
   });
 

@@ -126,16 +126,27 @@ it("deletion inside a pending insertion shrinks the insertion", () => {
   });
 });
 
-it("backward deletion at the start of a pending insertion is terminal", () => {
-  const { update } = setup();
+it("backward deletion at the start of a pending insertion deletes accepted text", () => {
+  const { editor, update } = setup();
   update(() => {
     acceptedText().select(1, 1);
     expect($insertReviewText("x", id("ins")).status).toBe("changed");
     insertionText().select(0, 0);
-    const outcome = $deleteReviewText(true);
-    expect(outcome.status).toBe("refused");
-    if (outcome.status === "refused")
-      expect(outcome.code).toBe("deletion-target-unavailable");
+    expect($deleteReviewText(true, id("del")).status).toBe("changed");
+  });
+  const inspected = editor
+    .getEditorState()
+    .read(() => $inspectReviewProposal("del"));
+  expect(inspected).toEqual({
+    status: "unchanged",
+    value: { kind: "deletion", proposal: { proposalId: "del", text: "A" } },
+  });
+  const insertion = editor
+    .getEditorState()
+    .read(() => $inspectReviewProposal("ins"));
+  expect(insertion).toEqual({
+    status: "unchanged",
+    value: { kind: "insertion", proposal: { proposalId: "ins", text: "x" } },
   });
 });
 
@@ -254,16 +265,77 @@ it("deletion inside a formatting target is refused", () => {
   });
 });
 
-it("forward deletion at the end of a pending insertion is terminal", () => {
-  const { update } = setup();
+it("forward deletion at the end of a pending insertion deletes accepted text", () => {
+  const { editor, update } = setup();
   update(() => {
     acceptedText().select(1, 1);
     expect($insertReviewText("xy", id("ins")).status).toBe("changed");
     insertionText().select(2, 2);
-    const outcome = $deleteReviewText(false);
+    expect($deleteReviewText(false, id("del")).status).toBe("changed");
+  });
+  const inspected = editor
+    .getEditorState()
+    .read(() => $inspectReviewProposal("del"));
+  expect(inspected).toEqual({
+    status: "unchanged",
+    value: { kind: "deletion", proposal: { proposalId: "del", text: "B" } },
+  });
+  const insertion = editor
+    .getEditorState()
+    .read(() => $inspectReviewProposal("ins"));
+  expect(insertion).toEqual({
+    status: "unchanged",
+    value: { kind: "insertion", proposal: { proposalId: "ins", text: "xy" } },
+  });
+});
+
+it("backward deletion from an element caret with accepted text to the left deletes one character", () => {
+  const { editor, update } = setup();
+  update(() => {
+    acceptedText().select(1, 1);
+    expect($insertReviewText("x", id("ins")).status).toBe("changed");
+    // Paragraph holds [A, insertion(X), B]; the element caret sits between
+    // the accepted text and the insertion wrapper.
+    const paragraph = $getRoot().getChildren()[0];
+    if (!$isElementNode(paragraph)) throw new Error("Expected a paragraph.");
+    paragraph.select(1, 1);
+    expect($deleteReviewText(true, id("del")).status).toBe("changed");
+  });
+  const inspected = editor
+    .getEditorState()
+    .read(() => $inspectReviewProposal("del"));
+  expect(inspected).toEqual({
+    status: "unchanged",
+    value: { kind: "deletion", proposal: { proposalId: "del", text: "A" } },
+  });
+  const insertion = editor
+    .getEditorState()
+    .read(() => $inspectReviewProposal("ins"));
+  expect(insertion).toEqual({
+    status: "unchanged",
+    value: { kind: "insertion", proposal: { proposalId: "ins", text: "x" } },
+  });
+});
+
+it("a second backward deletion pointing at proposal content stays refused", () => {
+  const { update } = setup(["B"]);
+  update(() => {
+    acceptedText().select(0, 0);
+    expect($insertReviewText("x", id("ins")).status).toBe("changed");
+    // Paragraph holds [insertion(X), B]; deleting B lands an element caret
+    // before the new deletion because its previous sibling is a wrapper.
+    acceptedText(1).select(1, 1);
+    expect($deleteReviewText(true, id("del")).status).toBe("changed");
+    const selection = $getSelection();
+    if (!$isRangeSelection(selection))
+      throw new Error("Expected a range selection.");
+    expect(selection.anchor.type).toBe("element");
+    expect(selection.anchor.offset).toBe(1);
+    // The caret points at the insertion wrapper, not accepted text.
+    const outcome = $deleteReviewText(true, id("other"));
     expect(outcome.status).toBe("refused");
     if (outcome.status === "refused")
-      expect(outcome.code).toBe("deletion-target-unavailable");
+      expect(outcome.code).toBe("ambiguous-boundary");
   });
 });
 

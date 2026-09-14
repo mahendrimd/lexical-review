@@ -91,6 +91,86 @@ test("adjacency preserves selection, while a nonempty proposal-local deletion re
   ).toHaveText("one two three");
 });
 
+test("native Backspace at a deletion boundary extends the deletion", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    window.__deletionFixture!.select(0, 4, 7);
+    window.__deletionFixture!.delete(false, "range");
+    // Caret at offset 0 of the deletion text: Backspace points at the
+    // accepted space before it and prepends under the same identity.
+    window.__deletionFixture!.select(1, 0);
+  });
+  await page.keyboard.press("Backspace");
+  expect(
+    await page.evaluate(() => window.__deletionFixture!.snapshot()),
+  ).toMatchObject({
+    proposal: {
+      value: {
+        kind: "deletion",
+        proposal: { proposalId: "deletion-1", text: " two" },
+      },
+    },
+    document: { status: "valid" },
+  });
+});
+
+test("native Delete at a deletion boundary extends the deletion", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    window.__deletionFixture!.select(0, 4, 7);
+    window.__deletionFixture!.delete(false, "range");
+    // Caret at the end of the deletion text: Delete points at the accepted
+    // space after it and appends under the same identity.
+    window.__deletionFixture!.select(1, 3);
+  });
+  await page.keyboard.press("Delete");
+  expect(
+    await page.evaluate(() => window.__deletionFixture!.snapshot()),
+  ).toMatchObject({
+    proposal: {
+      value: {
+        kind: "deletion",
+        proposal: { proposalId: "deletion-1", text: "two " },
+      },
+    },
+    document: { status: "valid" },
+  });
+});
+
+test("accepting a deletion then pressing Backspace proposes a new deletion", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    window.__deletionFixture!.select(0, 4, 7);
+    window.__deletionFixture!.delete(false, "range");
+    // Caret inside the deletion so accepting it restores the caret beside
+    // the remaining accepted text, which merges into one node.
+    window.__deletionFixture!.select(1, 1);
+    window.__deletionFixture!.resolve("accept");
+  });
+  expect(
+    await page.evaluate(() => window.__deletionFixture!.snapshot()),
+  ).toMatchObject({ lastOutcome: "changed" });
+  // Deleting resumes without refusal at the merged text end: the final
+  // character becomes a fresh deletion.
+  await page.keyboard.press("Backspace");
+  expect(
+    await page.evaluate(() => window.__deletionFixture!.snapshot()),
+  ).toMatchObject({ document: { status: "valid" }, lastOutcome: "changed" });
+  await expect(page.getByTestId("deletion-editor").locator("del")).toHaveCount(
+    1,
+  );
+  expect(
+    await page.evaluate(
+      () =>
+        document.querySelector('[data-testid="deletion-editor"] del')
+          ?.textContent,
+    ),
+  ).toBe("e");
+});
+
 test("cross-paragraph refusal preserves the document and selection", async ({
   page,
 }) => {
