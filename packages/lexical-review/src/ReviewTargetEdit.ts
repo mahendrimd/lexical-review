@@ -426,24 +426,9 @@ export function prepareProposalCaretDeletion(
       "unsupported-proposal-edit",
       "Text deletion cannot alter a pending formatting target.",
     );
-  const mapped = proposalMapOf(target, inspectProposalKind);
-  if (mapped.status !== "ready") return mapped;
-  const offset = getProposalOffset(
-    {
-      node: target.node,
-      offset: target.offset,
-      wrapper: target.wrapper,
-    },
-    mapped.value,
-  );
-  if (offset === null)
-    return refusal(
-      "invalid-structural-target",
-      "The proposal caret cannot be resolved in the live tree.",
-    );
-  const text = mapped.value.entries
-    .map((entry) => entry.node.getTextContent())
-    .join("");
+  const span = readProposalCaretOffset(target);
+  if (span.status !== "ready") return span;
+  const { offset, total, text } = span.value;
   if (!isTextBoundary(text, offset)) {
     return refusal(
       "invalid-structural-target",
@@ -456,7 +441,7 @@ export function prepareProposalCaretDeletion(
       "Backward deletion may not cross from proposal content into accepted content.",
     );
   }
-  if (!backward && offset === mapped.value.total) {
+  if (!backward && offset === total) {
     return refusal(
       "deletion-target-unavailable",
       "Forward deletion may not cross from proposal content into accepted content.",
@@ -467,10 +452,7 @@ export function prepareProposalCaretDeletion(
   const boundary = deletionOffset(text, offset, backward, granularity);
   const start = Math.min(offset, boundary);
   const end = Math.max(offset, boundary);
-  if (
-    end - start === mapped.value.total &&
-    isReplacementKind(target.proposalId)
-  )
+  if (end - start === total && isReplacementKind(target.proposalId))
     return { status: "ready", value: { action: "resolve-replacement" } };
   return { status: "ready", value: { action: "splice", start, end } };
 }
@@ -871,6 +853,102 @@ export function buildPastePlan(
 }
 
 /**
+ * Shared boundary resolution for deletion (#85). A proposal-side caret at
+ * proposal offset 0/total, or a collapsed paragraph element caret, addresses
+ * the accepted-side caret at the same visual position when the child in the
+ * deletion direction is supported accepted text. Anything else returns null
+ * and the caller keeps the classified target with its existing outcome, so
+ * structural/fragment precedence and every other neighbor are untouched.
+ * Never mints identity and never resolves.
+ */
+export function resolveBoundaryDeletionTarget(
+  target: ReviewTarget,
+  backward: boolean,
+): AcceptedCaretTarget | null {
+  if (target.kind === "proposal-caret") {
+    const side = selectedWrapperSide(target);
+    if (side !== "insertion" && side !== "deletion") return null;
+    const span = readProposalCaretOffset(target);
+    if (span.status !== "ready") return null;
+    if (
+      backward
+        ? span.value.offset !== 0
+        : span.value.offset !== span.value.total
+    )
+      return null;
+    return acceptedBoundaryNeighbor(
+      target.paragraph,
+      target.childIndex + (backward ? -1 : 1),
+      backward,
+      target.selection,
+    );
+  }
+  if (target.kind === "accepted-caret" && target.node === null) {
+    return acceptedBoundaryNeighbor(
+      target.paragraph,
+      backward ? target.childIndex - 1 : target.childIndex,
+      backward,
+      target.selection,
+    );
+  }
+  return null;
+}
+
+function acceptedBoundaryNeighbor(
+  paragraph: ParagraphNode,
+  childIndex: number,
+  backward: boolean,
+  selection: AcceptedCaretTarget["selection"],
+): AcceptedCaretTarget | null {
+  const neighbor = paragraph.getChildAtIndex(childIndex);
+  if (!$isTextNode(neighbor) || neighbor.getTextContentSize() === 0)
+    return null;
+  return {
+    kind: "accepted-caret",
+    paragraph,
+    node: neighbor,
+    offset: backward ? neighbor.getTextContentSize() : 0,
+    childIndex,
+    selection,
+  };
+}
+
+/**
+ * Read-only proposal-caret position shared by the boundary resolver and the
+ * proposal-caret deletion preparation, so the offset mapping lives once.
+ * Callers translate the null-ish outcomes into their own refusals.
+ */
+function readProposalCaretOffset(
+  target: ProposalCaretTarget,
+): Preparation<Readonly<{ offset: number; total: number; text: string }>> {
+  const mapped = proposalMapOf(target, inspectProposalKind);
+  if (mapped.status !== "ready") return mapped;
+  const offset = getProposalOffset(
+    {
+      node: target.node,
+      offset: target.offset,
+      wrapper: target.wrapper,
+    },
+    mapped.value,
+  );
+  if (offset === null)
+    return refusal(
+      "invalid-structural-target",
+      "The proposal caret cannot be resolved in the live tree.",
+    );
+  return {
+    status: "ready",
+    value: {
+      offset,
+      total: mapped.value.total,
+      text: mapped.value.entries
+        .map((entry) => entry.node.getTextContent())
+        .join(""),
+    },
+  };
+}
+
+/**
  * Non-mutating deletion classification behind the seam. Each arm delegates
  * to the same verify helper the matching commit branch re-runs, so the
  * read-only refusal rules live once: the classifier states them, the commit
@@ -884,9 +962,10 @@ export function $classifyReviewDeletion(
   granularity: "character" | "word",
   options: ReviewAuthoringOptions,
 ): Preparation<ResolvingEditPlan> {
+  const source = resolveBoundaryDeletionTarget(target, backward) ?? target;
   const plan = buildTextDeletionPlan(
-    target.kind,
-    selectedWrapperSide(target),
+    source.kind,
+    selectedWrapperSide(source),
     backward,
     granularity,
     options,
@@ -894,9 +973,9 @@ export function $classifyReviewDeletion(
   if (plan.status !== "ready") return plan;
   switch (plan.value.kind) {
     case "delete-proposal-caret": {
-      if (target.kind !== "proposal-caret") return kindMismatch();
+      if (source.kind !== "proposal-caret") return kindMismatch();
       const prepared = prepareProposalCaretDeletion(
-        target,
+        source,
         backward,
         granularity,
       );
@@ -904,15 +983,15 @@ export function $classifyReviewDeletion(
       return plan;
     }
     case "delete-proposal-range": {
-      if (target.kind !== "proposal-range") return kindMismatch();
-      const prepared = prepareProposalRangeDeletion(target);
+      if (source.kind !== "proposal-range") return kindMismatch();
+      const prepared = prepareProposalRangeDeletion(source);
       if (prepared.status !== "ready") return prepared;
       return plan;
     }
     case "delete-accepted-caret": {
-      if (target.kind !== "accepted-caret") return kindMismatch();
+      if (source.kind !== "accepted-caret") return kindMismatch();
       const verified = verifyAcceptedCaretDeletion(
-        target,
+        source,
         backward,
         granularity,
       );
@@ -929,9 +1008,9 @@ export function $classifyReviewDeletion(
       return plan;
     }
     case "delete-accepted-range": {
-      if (target.kind !== "accepted-range") return kindMismatch();
+      if (source.kind !== "accepted-range") return kindMismatch();
       const span = verifyDeleteAcceptedSpan(
-        target,
+        source,
         backward,
         plan.value.registration,
       );
@@ -1396,6 +1475,13 @@ function commitPlan(
   target: ReviewTarget,
   plan: ReviewTargetEditPlan,
 ): Preparation<TargetEditEffect> {
+  if (
+    plan.kind === "delete-proposal-caret" ||
+    plan.kind === "delete-accepted-caret"
+  ) {
+    const resolved = resolveBoundaryDeletionTarget(target, plan.backward);
+    if (resolved !== null) target = resolved;
+  }
   switch (plan.kind) {
     case "delete-proposal-caret":
       return commitDeleteProposalCaret(target, plan.backward, plan.granularity);
