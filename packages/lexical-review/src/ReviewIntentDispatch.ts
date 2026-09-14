@@ -19,6 +19,7 @@ import type { ReviewAuthoringOptions } from "./ReviewAuthoring";
 import { refusal, unchanged, type ReviewIntentOutcome } from "./ReviewIntent";
 import {
   inspectDirectionalDeletionTarget,
+  inspectDirectionalProposalDeletionTarget,
   inspectReviewTarget,
 } from "./ReviewTargeting";
 
@@ -53,12 +54,13 @@ export function $deleteReviewText(
   }
   const inspection = inspectReviewTarget();
   if (inspection.status !== "ready") {
-    // Explicit narrow path (#85): only the element-boundary ambiguity is
-    // eligible for directional deletion; every other refusal passes through
-    // untouched. Non-qualifying element carets keep their refusal because the
-    // directional inspection admits them only beside accepted text.
+    // Directional path (#85 accepted, #86 row 10 proposal): only the
+    // element-boundary ambiguity is eligible for directional deletion; every
+    // other refusal passes through untouched.
     if (inspection.code !== "ambiguous-boundary") return inspection;
-    const directional = inspectDirectionalDeletionTarget(backward);
+    const directional =
+      inspectDirectionalDeletionTarget(backward) ??
+      inspectDirectionalProposalDeletionTarget(backward);
     if (directional === null) return inspection;
     return $claimTextDeletion(directional, backward, options);
   }

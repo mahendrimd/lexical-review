@@ -7,11 +7,16 @@ import {
   $isTextNode,
   type ParagraphNode,
   type PointType,
+  type RangeSelection,
   type TextNode,
 } from "lexical";
 import {
   $createReviewFragmentNode,
+  $isReviewDeletionNode,
+  $isReviewFormattingNode,
   $isReviewFragmentNode,
+  $isReviewInsertionNode,
+  getTextChildren,
   isRootParagraph,
   ReviewFragmentNode,
   $createReviewInsertionNode,
@@ -36,6 +41,7 @@ import {
 } from "./ReviewIntent";
 import {
   fragmentAtPoint,
+  inspectElementCaretContext,
   inspectFragmentSelection,
   inspectReviewTarget,
   nextCharacterOffset,
@@ -58,6 +64,7 @@ import {
   inspectFragmentGroup,
   type CollectedProposalNodes,
 } from "./ReviewProposalCollection";
+import { proposalRunRange } from "./ReviewTargetMaps";
 
 export type ReviewFragmentParagraph = Readonly<{
   runs: readonly ReviewFormatRun[];
@@ -450,39 +457,155 @@ export function $claimFragmentDeletion(
   granularity: "character" | "word",
 ): ReviewIntentOutcome | null {
   const local = inspectFragmentSelection();
-  if (!local) return null;
-  if (local.status !== "ready") return local;
-  const value = local.value;
-  if (value.start === value.end) {
-    const text = units(payload(value.group))
-      .map((u) => u.text)
-      .join("");
-    const at = value.start;
-    if ((backward && at === 0) || (!backward && at === text.length))
-      return refusal(
-        "deletion-target-unavailable",
-        "Deletion cannot cross a fragment's outer ownership boundary.",
-      );
-    let target = backward
-      ? previousCharacterOffset(text, at)
-      : nextCharacterOffset(text, at);
-    if (
-      granularity === "word" &&
-      text.slice(Math.min(at, target), Math.max(at, target)) !== "\n"
-    ) {
-      const side = backward
-        ? text.slice(0, at).split("\n").at(-1)!
-        : text.slice(at).split("\n")[0]!;
-      const pattern = backward
-        ? /(?:[\p{L}\p{N}\p{M}_]+|[^\p{L}\p{N}\p{M}_\s]+)[^\S\n]*$|[^\S\n]+$/u
-        : /^[^\S\n]*(?:[\p{L}\p{N}\p{M}_]+|[^\p{L}\p{N}\p{M}_\s]+)|^[^\S\n]+/u;
-      const length = side.match(pattern)?.[0].length ?? Math.abs(target - at);
-      target = backward ? at - length : at + length;
-    }
-    value.start = Math.min(at, target);
-    value.end = Math.max(at, target);
+  if (local) {
+    if (local.status !== "ready") return local;
+    const value = local.value;
+    if (value.start === value.end)
+      return deleteFragmentPoint(value, backward, granularity);
+    return editLocal(value, [{ runs: [] }]);
   }
-  return editLocal(value, [{ runs: [] }]);
+  const inward = inspectInwardFragmentCaret(backward);
+  if (!inward) return null;
+  return deleteFragmentPoint(
+    {
+      group: inward.group,
+      selection: inward.selection,
+      start: inward.at,
+      end: inward.at,
+      backward,
+    },
+    backward,
+    granularity,
+  );
+}
+
+/**
+ * Inward fragment correction (Q11 amendment to #86 row 8): a collapsed
+ * caret outside any fragment, at its edge facing fragment content in the
+ * same paragraph, addresses the faced payload under the fragment's ID.
+ * Cross-paragraph facings decline so structural and row-12 paths keep
+ * their precedence. Guards mirror the directional entries: accepted-side,
+ * proposal-side (at its run edge), and paragraph element text carets; every
+ * visual gap is reachable through one of the three.
+ */
+function inspectInwardFragmentCaret(
+  backward: boolean,
+): { group: Group; at: number; selection: RangeSelection } | null {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+  const anchor = selection.anchor;
+  let paragraph: ParagraphNode;
+  let neighborIndex: number;
+  if (anchor.type === "text") {
+    const node = anchor.getNode();
+    if (!$isTextNode(node)) return null;
+    const parent = node.getParent();
+    if (parent === null) return null;
+    if (isRootParagraph(parent)) {
+      const size = node.getTextContentSize();
+      if (backward) {
+        if (anchor.offset !== 0) return null;
+        neighborIndex = node.getIndexWithinParent() - 1;
+      } else {
+        if (anchor.offset !== size) return null;
+        neighborIndex = node.getIndexWithinParent() + 1;
+      }
+      paragraph = parent;
+    } else if (
+      $isReviewInsertionNode(parent) ||
+      $isReviewDeletionNode(parent) ||
+      $isReviewFormattingNode(parent)
+    ) {
+      const grand = parent.getParent();
+      if (grand === null || !isRootParagraph(grand)) return null;
+      // Proposal-side caret at its run edge: the same visual gap as the
+      // element entry, so equivalence demands the same inward correction.
+      paragraph = grand;
+      const index = parent.getIndexWithinParent();
+      const [start, end] = proposalRunRange(
+        paragraph.getChildren(),
+        index,
+        parent,
+      );
+      if (index !== (backward ? start : end)) return null;
+      const edgeTexts = getTextChildren(parent);
+      const edgeNode = backward ? edgeTexts?.[0] : edgeTexts?.at(-1);
+      if (edgeNode === undefined || node.getKey() !== edgeNode.getKey())
+        return null;
+      const size = node.getTextContentSize();
+      if (backward ? anchor.offset !== 0 : anchor.offset !== size) return null;
+      neighborIndex = index + (backward ? -1 : 1);
+    } else {
+      return null;
+    }
+  } else if (anchor.type === "element") {
+    const context = inspectElementCaretContext();
+    if (context === null) return null;
+    paragraph = context.node;
+    neighborIndex = backward ? context.childIndex - 1 : context.childIndex;
+  } else {
+    return null;
+  }
+  const faced = paragraph.getChildAtIndex(neighborIndex);
+  if (!$isReviewFragmentNode(faced)) return null;
+  const group = inspectFragmentGroup(faced.getProposalId());
+  if (group.status !== "ready") return null;
+  if (!group.value.wrappers.some((w) => w.getKey() === faced.getKey()))
+    return null;
+  // Faced edge as a fragment-local point so offsetInGroup keeps the one
+  // offset accounting both paths share; only key/offset/type are read.
+  const texts = faced.getChildren<TextNode>();
+  const edge = backward ? texts.at(-1) : texts[0];
+  const point =
+    edge === undefined
+      ? {
+          key: faced.getKey(),
+          offset: backward ? faced.getChildrenSize() : 0,
+          type: "element" as const,
+        }
+      : {
+          key: edge.getKey(),
+          offset: backward ? edge.getTextContentSize() : 0,
+          type: "text" as const,
+        };
+  const at = offsetInGroup(point as unknown as PointType, group.value);
+  if (at === null) return null;
+  return { group: group.value, at, selection };
+}
+
+function deleteFragmentPoint(
+  value: FragmentSelection,
+  backward: boolean,
+  granularity: "character" | "word",
+): ReviewIntentOutcome | null {
+  const at = value.start;
+  const text = units(payload(value.group))
+    .map((u) => u.text)
+    .join("");
+  // Outward-facing at the outer edge targets the neighbor (#86 row 8
+  // outward): decline the fragment claim so structural/text handle it with
+  // the source fragment unchanged. Inward deletions stay fragment-local.
+  if ((backward && at === 0) || (!backward && at === text.length)) return null;
+  let target = backward
+    ? previousCharacterOffset(text, at)
+    : nextCharacterOffset(text, at);
+  if (
+    granularity === "word" &&
+    text.slice(Math.min(at, target), Math.max(at, target)) !== "\n"
+  ) {
+    const side = backward
+      ? text.slice(0, at).split("\n").at(-1)!
+      : text.slice(at).split("\n")[0]!;
+    const pattern = backward
+      ? /(?:[\p{L}\p{N}\p{M}_]+|[^\p{L}\p{N}\p{M}_\s]+)[^\S\n]*$|[^\S\n]+$/u
+      : /^[^\S\n]*(?:[\p{L}\p{N}\p{M}_]+|[^\p{L}\p{N}\p{M}_\s]+)|^[^\S\n]+/u;
+    const length = side.match(pattern)?.[0].length ?? Math.abs(target - at);
+    target = backward ? at - length : at + length;
+  }
+  return editLocal(
+    { ...value, start: Math.min(at, target), end: Math.max(at, target) },
+    [{ runs: [] }],
+  );
 }
 
 export function $claimFragmentFormatting(

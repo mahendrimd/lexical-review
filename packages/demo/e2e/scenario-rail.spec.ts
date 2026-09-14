@@ -13,18 +13,6 @@ async function openDeveloperDetails(page: Page) {
   await page.getByText(DEVELOPER_DETAILS_LABEL, { exact: true }).click();
 }
 
-function stripKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stripKeys);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([key]) => key !== "key")
-        .map(([key, entry]) => [key, stripKeys(entry)]),
-    );
-  }
-  return value;
-}
-
 async function snapshot(page: Page) {
   return page.evaluate(() => window.__scenarios!.snapshot());
 }
@@ -171,7 +159,7 @@ test("R2 correction keeps identity then direct removal empties the list", async 
   await expect(page.getByTestId("all-accepted-preview")).toHaveText("AB");
 });
 
-test("R3 accepted-side deletion refuses with zero mutation", async ({
+test("R3 accepted-side deletion shrinks the insertion neighbor (#86 row 2)", async ({
   page,
 }) => {
   await rail(page, "r3");
@@ -180,21 +168,16 @@ test("R3 accepted-side deletion refuses with zero mutation", async ({
 
   await page.getByTestId("act-delete-forward").click();
 
-  await expect(page.getByRole("status")).toContainText("This edit was refused");
+  await expect(page.getByRole("status")).toContainText("pending proposal");
   const after = await snapshot(page);
-  expect(stripKeys(after.document)).toEqual(stripKeys(before.document));
-  expect(after.selection).toEqual(before.selection);
-  expect(after.text).toEqual(before.text);
-  expect(after.proposals).toHaveLength(1);
+  expect(after.text).toBe("AB");
+  expect(after.proposals).toHaveLength(0);
 
   await page.getByTestId("generate-evidence").click();
   await openDeveloperDetails(page);
-  await expect(page.getByTestId("outcome-pane")).toContainText("refused");
-  await expect(page.getByTestId("outcome-pane")).toContainText(
-    "deletion-target-unavailable",
-  );
+  await expect(page.getByTestId("outcome-pane")).toContainText("changed");
   await expect(page.getByTestId("accepted-preview")).toHaveText("AB");
-  await expect(page.getByTestId("all-accepted-preview")).toHaveText("ABX");
+  await expect(page.getByTestId("all-accepted-preview")).toHaveText("AB");
 });
 
 test("N1 atomic replacement carries one shared identity", async ({ page }) => {

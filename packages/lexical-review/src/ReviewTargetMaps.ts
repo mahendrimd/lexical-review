@@ -71,6 +71,29 @@ export function isSameProposalNode(
   );
 }
 
+/**
+ * Contiguous same-proposal run around a child index, expanding both ways
+ * while siblings merge with the reference. Pure index math owned by the
+ * leaf so classification, neighbor targeting, and fragment inward cannot
+ * diverge on run membership.
+ */
+export function proposalRunRange(
+  children: readonly LexicalNode[],
+  index: number,
+  reference: ReviewElementNode,
+): readonly [start: number, end: number] {
+  let start = index;
+  let end = index;
+  while (start > 0 && isSameProposalNode(children[start - 1], reference))
+    start -= 1;
+  while (
+    end + 1 < children.length &&
+    isSameProposalNode(children[end + 1], reference)
+  )
+    end += 1;
+  return [start, end];
+}
+
 type OffsetUnit<Taken> = Readonly<{
   taken: Taken;
   start: number;

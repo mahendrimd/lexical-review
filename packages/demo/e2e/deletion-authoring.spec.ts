@@ -68,7 +68,7 @@ for (const action of ["accept", "reject", "remove"] as const) {
   });
 }
 
-test("adjacency preserves selection, while a nonempty proposal-local deletion restores accepted text", async ({
+test("accepted-side adjacency restores deletion; proposal-local nonempty also restores", async ({
   page,
 }) => {
   await page.evaluate(() => {
@@ -76,14 +76,18 @@ test("adjacency preserves selection, while a nonempty proposal-local deletion re
     window.__deletionFixture!.delete(false, "range");
     window.__deletionFixture!.select(2, 0);
   });
-  const before = await page.evaluate(() =>
-    window.__deletionFixture!.snapshot(),
-  );
+  // #86 row 4: accepted caret facing a deletion neighbor whole-restores it.
   await page.keyboard.press("Backspace");
-  expect(
-    await page.evaluate(() => window.__deletionFixture!.snapshot()),
-  ).toEqual({ ...(before as object), lastOutcome: "refused" });
-  await page.evaluate(() => window.__deletionFixture!.select(1, 1, 2));
+  await expect(page.locator("del")).toHaveCount(0);
+  await expect(
+    page.getByTestId("deletion-editor").locator("p").first(),
+  ).toHaveText("one two three");
+  // Re-create the deletion, then a nonempty proposal-local range restores it.
+  await page.evaluate(() => {
+    window.__deletionFixture!.select(0, 4, 7);
+    window.__deletionFixture!.delete(false, "range");
+    window.__deletionFixture!.select(1, 1, 2);
+  });
   await page.keyboard.press("Delete");
   await expect(page.locator("del")).toHaveCount(0);
   await expect(

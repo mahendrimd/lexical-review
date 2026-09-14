@@ -5,18 +5,6 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__proposalEvidence !== undefined);
 });
 
-function stripKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stripKeys);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([key]) => key !== "key")
-        .map(([key, entry]) => [key, stripKeys(entry)]),
-    );
-  }
-  return value;
-}
-
 async function snapshot(page: Page) {
   return page.evaluate(() => window.__proposalEvidence!.snapshot());
 }
@@ -141,21 +129,19 @@ test("semantic content separates accepted, all-accepted, and pending-only native
   expect(native).not.toContain("terminal");
 });
 
-test("refusal preserves document and selection with a refused outcome", async ({
+test("accepted-side deletion into an insertion neighbor shrinks it (#86 row 2)", async ({
   page,
 }) => {
   await page.getByTestId("reset-baseline").click();
   await page.getByTestId("insert-first").click();
   await page.evaluate(() => window.__proposalEvidence!.selectAccepted());
-  const before = await snapshot(page);
 
-  await page.getByTestId("refuse-deletion").click();
+  await page.getByTestId("accepted-side-deletion").click();
 
-  await expect(page.getByTestId("outcome-pane")).toContainText("refused");
+  await expect(page.getByTestId("outcome-pane")).toContainText("changed");
   const after = await snapshot(page);
-  expect(stripKeys(after.document)).toEqual(stripKeys(before.document));
-  expect(after.selection).toEqual(before.selection);
-  expect(after.text).toEqual(before.text);
+  expect(after.text).toBe("AB");
+  expect(after.proposals).toEqual([]);
 });
 
 test("preview lifecycle stays separate from the operation outcome", async ({

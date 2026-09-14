@@ -441,11 +441,11 @@ describe("node-backed review session targeting", () => {
   });
 
   it.each([
-    ["before", 0, KEY_DELETE_COMMAND],
-    ["after", 2, KEY_BACKSPACE_COMMAND],
+    ["before", 0, KEY_DELETE_COMMAND, 3],
+    ["after", 2, KEY_BACKSPACE_COMMAND, 3],
   ] as const)(
-    "refuses accepted-side deletion %s pending deletion content",
-    async (_side, acceptedIndex, command) => {
+    "restores pending deletion content from the accepted side %s it (#86 row 4)",
+    async (_side, acceptedIndex, command, caretOffset) => {
       const editor = createReviewEditor();
       const outcomes: ReviewIntentOutcome[] = [];
       const { unregister } = open(
@@ -470,21 +470,21 @@ describe("node-backed review session targeting", () => {
           accepted.selectStart();
         }
       });
-      const beforeDocument = editor.getEditorState().toJSON();
-      const beforeSelection = editor.getEditorState().read(liveSelection);
 
       expect(
         editor.dispatchCommand(command, new KeyboardEvent("keydown")),
       ).toBe(true);
       await Promise.resolve();
 
-      expect(outcomes).toMatchObject([
-        { code: "deletion-target-unavailable", status: "refused" },
-      ]);
-      expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
-      expect(editor.getEditorState().read(liveSelection)).toEqual(
-        beforeSelection,
-      );
+      expect(outcomes).toMatchObject([{ status: "changed" }]);
+      editor.getEditorState().read(() => {
+        expect(firstParagraph().getTextContent()).toBe("ABCD");
+      });
+      // Whole-restore lands at the end of restored text for every origin.
+      expect(editor.getEditorState().read(liveSelection)).toMatchObject({
+        anchor: { offset: caretOffset },
+        focus: { offset: caretOffset },
+      });
       unregister();
     },
   );

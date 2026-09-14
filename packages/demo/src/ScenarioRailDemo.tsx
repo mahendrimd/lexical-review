@@ -52,7 +52,7 @@ const SCENARIOS: readonly ScenarioDef[] = [
   },
   {
     id: "r3",
-    label: "Protect pending work",
+    label: "Edit beside pending work",
   },
   {
     id: "n1",
@@ -525,7 +525,7 @@ export default function ScenarioRailDemo({
   const explanations: Record<ScenarioId, string> = {
     r1: "Start with AB. Insert x between the letters, then continue with y. Both keystrokes belong to one pending proposal; the accepted document stays AB until you accept it.",
     r2: "This example starts with xy already suggested between A and B. Correct it by adding z. The proposal keeps its identity. Remove withdraws the author’s suggestion.",
-    r3: "A pending X sits after accepted text AB. Try deleting forward from the accepted side. The package refuses this unsupported target and preserves the document and selection.",
+    r3: "A pending X sits after accepted text AB. Deleting forward from the accepted side shrinks that neighbor; emptying a single-character neighbor removes it.",
     n1: "Change cat to bat. The deleted c and inserted b form one replacement proposal, so they are accepted or rejected together.",
     n2: "Split AB between its letters. A paragraph boundary is a reviewable change too: accepting keeps the split; rejecting rejoins the text.",
     m1: "Merge A and B at the paragraph boundary. The merge is a pending structural proposal: accepting keeps one paragraph; rejecting restores the boundary.",
