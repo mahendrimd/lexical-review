@@ -145,7 +145,7 @@ export function RouteWiringFixture() {
           { discrete: true },
         );
       },
-      refuseDeletion() {
+      attemptAcceptedSideDeletion() {
         editor.update(
           () => {
             $getRoot().getAllTextNodes()[0]?.select(1, 1);
@@ -358,7 +358,7 @@ declare global {
       formatToolbar(): void;
       formatRoot(): void;
       continueProposal(value?: string): void;
-      refuseDeletion(): void;
+      attemptAcceptedSideDeletion(): void;
       resolveViaCommand(action: "accept" | "reject" | "remove"): void;
       resolveRoot(action: "accept" | "reject" | "remove"): void;
       claimSameObject(): { before: number; after: number };

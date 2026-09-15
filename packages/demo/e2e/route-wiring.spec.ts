@@ -102,31 +102,27 @@ test("proposal-side continuation keeps identity with changed", async ({
   await expect(editor.locator("ins")).toHaveText("x!");
 });
 
-test("accepted-side deletion refuses without mutation or selection change", async ({
+test("accepted-side deletion into an insertion neighbor shrinks it (#86 row 2)", async ({
   page,
 }) => {
-  const before = await page.evaluate(() => {
+  await page.evaluate(() => {
     window.__routeWiringFixture!.reset();
     window.__routeWiringFixture!.selectAccepted();
     window.__routeWiringFixture!.insertRoot("x");
     window.__routeWiringFixture!.selectAccepted();
-    return window.__routeWiringFixture!.snapshot();
   });
-  const after = await page.evaluate(() => {
-    window.__routeWiringFixture!.refuseDeletion();
-    return window.__routeWiringFixture!.snapshot();
+  await page.evaluate(() => {
+    window.__routeWiringFixture!.attemptAcceptedSideDeletion();
   });
-  expect(after.lastOutcome).toMatchObject({
-    code: "deletion-target-unavailable",
-    status: "refused",
-  });
-  expect(stripKeys(after.document)).toEqual(stripKeys(before.document));
-  expect(after.selection).toEqual(before.selection);
-  expect(after.text).toEqual(before.text);
+  const after = await page.evaluate(() =>
+    window.__routeWiringFixture!.snapshot(),
+  );
+  expect(after.lastOutcome).toMatchObject({ status: "changed" });
+  expect(after.text).toBe("AB");
+  expect(after.proposals).toEqual([]);
   const editor = page.getByTestId("route-wiring-editor");
-  await expect(editor).toHaveText("AxB");
-  await expect(editor.locator("ins")).toHaveCount(1);
-  await expect(editor.locator("ins")).toHaveText("x");
+  await expect(editor).toHaveText("AB");
+  await expect(editor.locator("ins")).toHaveCount(0);
 });
 
 test("one physical action is claimed once", async ({ page }) => {

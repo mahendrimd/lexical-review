@@ -130,11 +130,20 @@ step, or saved coordinate record is involved.
 
 A nonempty deletion intention inside a pending deletion restores that whole
 proposal's accepted text and removes the proposal. Inside a pending insertion,
-it removes only the targeted insertion text. A caret facing pending content
-from the accepted side of an independent insertion/deletion, or facing outward
-from a proposal, refuses without
-changing the document or selection. Cross-paragraph and ambiguous ranges also
-refuse without mutation.
+it removes only the targeted insertion text. A collapsed caret at a proposal
+edge facing a neighboring proposal addresses that neighbor in the deletion
+direction: independent insertions and replacement new sides shrink (emptying
+the new side cancels the replacement); independent deletions whole-restore;
+replacement old sides whole-cancel for both character and word; formatting
+neighbors refuse. At the replacement seam, backward cancels while forward
+shrinks the new side. Fragment-outward deletions address the outside neighbor
+with the source fragment unchanged; an outside caret at its edge facing
+fragment content in the same paragraph corrects inward under the fragment's
+ID (fragment-local deletion and caret, as from inside); cross-paragraph
+facings keep their existing structural/refusal paths. Fragment-internal newlines delete as one
+unit. Each keypress re-applies the rule to the resulting position, and
+independent identities never merge. Cross-paragraph and ambiguous ranges retain
+their existing refusals without mutation.
 
 `$inspectReviewProposal(proposalId)` reads current node content inside an editor
 read/update, tagged with `kind: "deletion"`. `$resolveReviewProposal(proposalId,

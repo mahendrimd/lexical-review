@@ -31,6 +31,7 @@ import {
   isolateSpanNodes,
   overlappingSlices,
   proposalMapOf,
+  proposalRunRange,
   type AcceptedMap,
   type ProposalMap,
 } from "./ReviewTargetMaps";
@@ -520,15 +521,16 @@ export type ReviewTarget =
   | ProposalRangeTarget;
 
 /**
- * Directional deletion entry for collapsed paragraph element carets (#85).
- * Returns the accepted-side caret at the same visual position when the child
- * in the deletion direction is supported accepted text, else null. Null also
- * covers every guard failure, so all refusals stay owned by the existing
- * paths and this function is a pure allow-list with no refusal precedence.
+ * Shared guard climb for collapsed paragraph element carets: the live
+ * selection must be a collapsed element selection on one root paragraph with
+ * valid formatting and structure. Returns the paragraph, child index, and
+ * selection for neighbor synthesis, else null.
  */
-export function inspectDirectionalDeletionTarget(
-  backward: boolean,
-): AcceptedCaretTarget | null {
+export function inspectElementCaretContext(): {
+  node: ParagraphNode;
+  childIndex: number;
+  selection: RangeSelection;
+} | null {
   const selection = $getSelection();
   if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
   if (selection.anchor.type !== "element" || selection.focus.type !== "element")
@@ -538,7 +540,22 @@ export function inspectDirectionalDeletionTarget(
   if (!isRootParagraph(node)) return null;
   if (validateSelectionFormatting(selection) !== null) return null;
   if (validateParagraphStructure(node) !== null) return null;
-  const childIndex = selection.anchor.offset;
+  return { node, childIndex: selection.anchor.offset, selection };
+}
+
+/**
+ * Directional deletion entry for collapsed paragraph element carets (#85).
+ * Returns the accepted-side caret at the same visual position when the child
+ * in the deletion direction is supported accepted text, else null. Null also
+ * covers every guard failure, so all refusals stay owned by the existing
+ * paths and this function is a pure allow-list with no refusal precedence.
+ */
+export function inspectDirectionalDeletionTarget(
+  backward: boolean,
+): AcceptedCaretTarget | null {
+  const context = inspectElementCaretContext();
+  if (context === null) return null;
+  const { node, childIndex, selection } = context;
   const neighbor = node.getChildAtIndex(backward ? childIndex - 1 : childIndex);
   if (!$isTextNode(neighbor) || neighbor.getTextContentSize() === 0)
     return null;
@@ -550,6 +567,80 @@ export function inspectDirectionalDeletionTarget(
     childIndex: backward ? childIndex - 1 : childIndex,
     selection,
   };
+}
+
+/**
+ * Shared neighbor-proposal synthesis for deletion (#86 rows 2-7, 10).
+ * Returns a synthetic proposal-caret at the neighbor's edge in the deletion
+ * direction when the child at neighborIndex is a supported insertion,
+ * deletion, or formatting wrapper, else null. Fragment, boundary, and
+ * accepted children stay with their existing paths. Pure allow-list: null
+ * covers every guard failure and every unsupported neighbor. Never mints
+ * identity and never resolves; the existing proposal-caret
+ * preparation/commit owns mutation and caret restore.
+ */
+export function buildNeighborProposalCaret(
+  paragraph: ParagraphNode,
+  neighborIndex: number,
+  backward: boolean,
+  selection: RangeSelection,
+): ProposalCaretTarget | null {
+  const neighbor = paragraph.getChildAtIndex(neighborIndex);
+  if (
+    !$isReviewInsertionNode(neighbor) &&
+    !$isReviewDeletionNode(neighbor) &&
+    !$isReviewFormattingNode(neighbor)
+  )
+    return null;
+  const proposalId = neighbor.getProposalId();
+  if (inspectProposalKind(proposalId).status !== "ready") return null;
+  // Side run: contiguous same-type same-ID wrappers around the neighbor, so
+  // split sides shrink one edge without crossing into the other side.
+  const children = paragraph.getChildren();
+  const [startIndex, endIndex] = proposalRunRange(
+    children,
+    neighborIndex,
+    neighbor,
+  );
+  const run = children.slice(startIndex, endIndex + 1);
+  const wrappers = run.filter(isReviewElementNode);
+  if (wrappers.length !== run.length || wrappers.length === 0) return null;
+  const edgeWrapper = (backward ? wrappers.at(-1) : wrappers[0])!;
+  const edgeTexts = getTextChildren(edgeWrapper);
+  if (edgeTexts === null || edgeTexts.length === 0) return null;
+  const edgeNode = (backward ? edgeTexts.at(-1) : edgeTexts[0])!;
+  if (edgeNode.getTextContentSize() === 0) return null;
+  const edgeIndex = getChildIndex(paragraph, edgeWrapper);
+  if (edgeIndex === null) return null;
+  return {
+    kind: "proposal-caret",
+    paragraph,
+    wrapper: edgeWrapper,
+    node: edgeNode,
+    offset: backward ? edgeNode.getTextContentSize() : 0,
+    childIndex: edgeIndex,
+    proposalId,
+    wrappers,
+    selection,
+  };
+}
+
+/**
+ * Directional proposal entry for collapsed paragraph element carets (#86 row
+ * 10). Guard-climbs the live element selection, then delegates to
+ * buildNeighborProposalCaret.
+ */
+export function inspectDirectionalProposalDeletionTarget(
+  backward: boolean,
+): ProposalCaretTarget | null {
+  const context = inspectElementCaretContext();
+  if (context === null) return null;
+  return buildNeighborProposalCaret(
+    context.node,
+    backward ? context.childIndex - 1 : context.childIndex,
+    backward,
+    context.selection,
+  );
 }
 
 /** Classify the live selection into one interaction target; maps stay inside. */
@@ -765,24 +856,17 @@ function buildProposalMapAroundPoint(
   point: ProposalPoint,
 ): Preparation<ProposalMap> {
   const children = point.paragraph.getChildren();
-  let startIndex = point.childIndex;
-  let endIndex = point.childIndex;
-  const isSameWrapper = (
-    child: LexicalNode | undefined,
-  ): child is ReviewElementNode => isSameProposalNode(child, point.wrapper);
-
-  while (startIndex > 0 && isSameWrapper(children[startIndex - 1])) {
-    startIndex -= 1;
-  }
-  while (
-    endIndex + 1 < children.length &&
-    isSameWrapper(children[endIndex + 1])
-  ) {
-    endIndex += 1;
-  }
+  const [startIndex, endIndex] = proposalRunRange(
+    children,
+    point.childIndex,
+    point.wrapper,
+  );
   const startWrapper = children[startIndex];
   const endWrapper = children[endIndex];
-  if (!isSameWrapper(startWrapper) || !isSameWrapper(endWrapper)) {
+  if (
+    !isSameProposalNode(startWrapper, point.wrapper) ||
+    !isSameProposalNode(endWrapper, point.wrapper)
+  ) {
     return refusal(
       "invalid-structural-target",
       "The proposal caret is not attached to a supported proposal run.",

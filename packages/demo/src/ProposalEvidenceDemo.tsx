@@ -215,10 +215,10 @@ export default function ProposalEvidenceDemo({
         </button>
         <button
           type="button"
-          data-testid="refuse-deletion"
+          data-testid="accepted-side-deletion"
           onClick={attemptAcceptedSideDeletion}
         >
-          Accepted-side Delete (refuses)
+          Accepted-side Delete (shrinks neighbor)
         </button>
       </section>
 

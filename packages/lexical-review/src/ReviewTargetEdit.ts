@@ -65,6 +65,7 @@ import {
   resolveStartEntry,
 } from "./ReviewTargetMaps";
 import {
+  buildNeighborProposalCaret,
   inspectProposalGroup,
   inspectProposalKind,
   isTextBoundary,
@@ -565,6 +566,31 @@ export function readAcceptedRangeText(
   return { text, uniformSelectionFormat };
 }
 
+/**
+ * Gap caret after a caret-driven splice emptied its run: surviving text
+ * end before the gap, else surviving text start after it, else the
+ * paragraph (lone-removal contract). Text-first so later merges remap to
+ * the same visual position.
+ */
+function placeRemovedRunCaret(
+  paragraph: ParagraphNode,
+  fallbackIndex: number,
+): void {
+  const children = paragraph.getChildren();
+  const at = Math.min(Math.max(fallbackIndex, 0), children.length);
+  const previous = children.slice(0, at).filter($isTextNode).at(-1);
+  if (previous !== undefined) {
+    previous.selectEnd();
+    return;
+  }
+  const next = children.slice(at).find($isTextNode);
+  if (next !== undefined) {
+    next.select(0, 0);
+    return;
+  }
+  paragraph.select(at, at);
+}
+
 export function placeProposalCaret(
   paragraph: ParagraphNode,
   wrappers: readonly ReviewElementNode[],
@@ -853,21 +879,20 @@ export function buildPastePlan(
 }
 
 /**
- * Shared boundary resolution for deletion (#85). A proposal-side caret at
- * proposal offset 0/total, or a collapsed paragraph element caret, addresses
- * the accepted-side caret at the same visual position when the child in the
- * deletion direction is supported accepted text. Anything else returns null
- * and the caller keeps the classified target with its existing outcome, so
- * structural/fragment precedence and every other neighbor are untouched.
+ * Shared boundary resolution for deletion (#85, extended by #86 row 7-8).
+ * A proposal-side caret at proposal offset 0/total, or a collapsed paragraph
+ * element caret, addresses the accepted-side caret at the same visual position
+ * when the child in the deletion direction is supported accepted text.
+ * #86: any proposal side (including inside-format and fragment-outward) at
+ * its run edge may address an accepted neighbor; proposal neighbors are owned
+ * by resolveProposalNeighborDeletionTarget. Anything else returns null.
  * Never mints identity and never resolves.
  */
-export function resolveBoundaryDeletionTarget(
+function resolveBoundaryDeletionTarget(
   target: ReviewTarget,
   backward: boolean,
 ): AcceptedCaretTarget | null {
   if (target.kind === "proposal-caret") {
-    const side = selectedWrapperSide(target);
-    if (side !== "insertion" && side !== "deletion") return null;
     const span = readProposalCaretOffset(target);
     if (span.status !== "ready") return null;
     if (
@@ -911,6 +936,72 @@ function acceptedBoundaryNeighbor(
     childIndex,
     selection,
   };
+}
+
+/**
+ * Neighbor-proposal resolution for deletion (#86 rows 2-7, 10). Locates the
+ * neighbor in the deletion direction from a collapsed caret at its run edge
+ * (accepted text/element carets and any proposal edge, including
+ * inside-format and fragment-outward) and delegates synthesis to
+ * buildNeighborProposalCaret: insertion / replacement-new shrink (terminal
+ * cancels via the existing whole-run check), deletion whole-restores,
+ * replacement-old whole-cancels, formatting refuses via the existing
+ * unsupported-proposal-edit path. Interior carets and non-proposal neighbors
+ * return null so existing paths stay untouched.
+ */
+function resolveProposalNeighborDeletionTarget(
+  target: ReviewTarget,
+  backward: boolean,
+): ProposalCaretTarget | null {
+  if (target.kind !== "accepted-caret" && target.kind !== "proposal-caret")
+    return null;
+  let neighborIndex: number;
+  if (target.kind === "accepted-caret") {
+    if (target.node !== null) {
+      const size = target.node.getTextContentSize();
+      if (backward) {
+        if (target.offset !== 0) return null;
+        neighborIndex = target.childIndex - 1;
+      } else {
+        if (target.offset !== size) return null;
+        neighborIndex = target.childIndex + 1;
+      }
+    } else {
+      neighborIndex = backward ? target.childIndex - 1 : target.childIndex;
+    }
+  } else {
+    const span = readProposalCaretOffset(target);
+    if (span.status !== "ready") return null;
+    if (
+      backward
+        ? span.value.offset !== 0
+        : span.value.offset !== span.value.total
+    )
+      return null;
+    neighborIndex = target.childIndex + (backward ? -1 : 1);
+  }
+  return buildNeighborProposalCaret(
+    target.paragraph,
+    neighborIndex,
+    backward,
+    target.selection,
+  );
+}
+
+/**
+ * Single neighbor entry for deletion (#85 boundary, #86 rows 2-7, 10):
+ * proposal neighbors win, accepted neighbors come next, else null so the
+ * caller keeps the classified target. One function so classification and
+ * commit cannot diverge on precedence.
+ */
+export function resolveNeighborDeletionTarget(
+  target: ReviewTarget,
+  backward: boolean,
+): ReviewTarget | null {
+  return (
+    resolveProposalNeighborDeletionTarget(target, backward) ??
+    resolveBoundaryDeletionTarget(target, backward)
+  );
 }
 
 /**
@@ -962,7 +1053,9 @@ export function $classifyReviewDeletion(
   granularity: "character" | "word",
   options: ReviewAuthoringOptions,
 ): Preparation<ResolvingEditPlan> {
-  const source = resolveBoundaryDeletionTarget(target, backward) ?? target;
+  // #86: neighbor targets (proposal first, accepted next) win over the
+  // classified target; null keeps it.
+  const source = resolveNeighborDeletionTarget(target, backward) ?? target;
   const plan = buildTextDeletionPlan(
     source.kind,
     selectedWrapperSide(source),
@@ -1029,6 +1122,11 @@ function commitDeleteProposalCaret(
   const prepared = prepareProposalCaretDeletion(target, backward, granularity);
   if (prepared.status !== "ready") return prepared;
   if (prepared.value.action === "resolve-deletion") {
+    // Whole-restore lands at the end of restored text for every origin
+    // (#86 row 4): touch the restored tail so the resolution's own
+    // touches-caret owns the final placement, inside and outside alike.
+    const tail = target.wrappers.at(-1);
+    if (tail !== undefined) getTextChildren(tail)?.at(-1)?.selectEnd();
     return {
       status: "ready",
       value: {
@@ -1054,6 +1152,20 @@ function commitDeleteProposalCaret(
     prepared.value.end,
   );
   if (spliced.status !== "ready") return spliced;
+  if (
+    target.wrappers.every((wrapper) =>
+      (getTextChildren(wrapper) ?? []).every(
+        (textNode) => textNode.getTextContentSize() === 0,
+      ),
+    )
+  ) {
+    // Emptied run: prefer a surviving text caret at the gap so later
+    // merges remap to the same visual position instead of sliding a stale
+    // element caret across surviving text. Falls through to the paragraph
+    // when nothing survives (lone-removal contract).
+    placeRemovedRunCaret(target.paragraph, target.childIndex);
+    return mutated();
+  }
   placeProposalCaret(
     target.paragraph,
     target.wrappers,
@@ -1479,7 +1591,7 @@ function commitPlan(
     plan.kind === "delete-proposal-caret" ||
     plan.kind === "delete-accepted-caret"
   ) {
-    const resolved = resolveBoundaryDeletionTarget(target, plan.backward);
+    const resolved = resolveNeighborDeletionTarget(target, plan.backward);
     if (resolved !== null) target = resolved;
   }
   switch (plan.kind) {

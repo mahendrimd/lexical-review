@@ -355,7 +355,7 @@ describe("refusal preservation through the intent seams", () => {
     expectPreserved(editor, beforeDoc, beforeSelection);
   });
 
-  it("preserves state when deletion would cross proposal content", () => {
+  it("shrinks the proposal neighbor instead of refusing the crossing (#86 row 2)", () => {
     const editor = setup([
       reviewNode("review-insertion", "p", [text("x")]),
       text("ab"),
@@ -369,8 +369,6 @@ describe("refusal preservation through the intent seams", () => {
       },
       { discrete: true },
     );
-    const beforeDoc = snapshotState(editor);
-    const beforeSelection = snapshotSelection(editor);
     let outcome: ReviewIntentOutcome | undefined;
     editor.update(
       () => {
@@ -378,11 +376,10 @@ describe("refusal preservation through the intent seams", () => {
       },
       { discrete: true },
     );
-    expect(outcome).toMatchObject({
-      status: "refused",
-      code: "deletion-target-unavailable",
-    });
-    expectPreserved(editor, beforeDoc, beforeSelection);
+    expect(outcome).toMatchObject({ status: "changed" });
+    expect(
+      editor.getEditorState().read(() => $inspectReviewProposal("p").status),
+    ).toBe("refused");
   });
 
   it("reports invalid-proposal-id before equivalence-unchanged", () => {
