@@ -60,7 +60,11 @@ review document is a snapshot of review state that can be reopened for authoring
 Lexical selections identify the caret or selected range in the tree. Lexical
 Review interprets that selection as an interaction target before determining
 review intent. At proposal boundaries, accepted-side association and
-proposal-side association distinguish which content the caret addresses.
+proposal-side association distinguish which content the caret addresses for
+operations such as typing. Collapsed deletion additionally uses direction to
+address the neighbor at an edge. Selection classification alone is therefore
+not the final deletion target; see
+[collapsed Backspace and Delete](docs/proposal-behavior.md#collapsed-backspace-and-delete).
 
 ### Review interactions and editor updates
 
@@ -70,13 +74,13 @@ browser commands to the same semantic operations available to direct callers.
 
 ## Responsibility ownership
 
-| Module | Owns |
-| --- | --- |
-| Client registration | Browser events, command claiming, composition coordination, and outcome reporting; calls the same semantic operations available to direct callers. |
-| Intent dispatch and kind owners | Which interaction owns the input, its supported behavior, and whether it edits or resolves existing work. |
-| Targeting and target edits | Accepted-side versus proposal-side selection, validation, and text-edit mechanics: offsets, mutation, and caret placement. Structural, fragment, and formatting owners retain their specialized mechanics. |
-| Session, document, and resolution | Opening validated documents, reading live state, saving snapshots, inspecting proposals, and settling current pending work. |
-| Interchange adapter | Mapping decisions at the serialized-document seam, independent of live editing. Currently the separate WER package only reports unsupported atomic-fragment export; it is not a general mapper. |
+| Module                            | Owns                                                                                                                                                                                                                                     |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Client registration               | Browser events, command claiming, composition coordination, and outcome reporting; calls the same semantic operations available to direct callers.                                                                                       |
+| Intent dispatch and kind owners   | Which interaction owns the input, its supported behavior, and whether it edits or resolves existing work.                                                                                                                                |
+| Targeting and target edits        | Accepted-side versus proposal-side selection, directional deletion targets, validation, and text-edit mechanics: offsets, mutation, and caret placement. Structural, fragment, and formatting owners retain their specialized mechanics. |
+| Session, document, and resolution | Opening validated documents, reading live state, saving snapshots, inspecting proposals, and settling current pending work.                                                                                                              |
+| Interchange adapter               | Mapping decisions at the serialized-document seam, independent of live editing. Currently the separate WER package only reports unsupported atomic-fragment export; it is not a general mapper.                                          |
 
 The root entrypoint is React-free; client registration and the React plugin are
 in `lexical-review/client`. Hosts own their application layout and review UI.
@@ -107,6 +111,27 @@ the first owner returning an outcome wins, including a refusal. A claim returnin
 `null` means another owner may try. A refusal does not authorize a fallback edit.
 The exact precedence belongs to [intent dispatch and its tests](packages/lexical-review/src/ReviewIntentDispatch.spec.ts).
 
+### Directional deletion targeting
+
+Deletion first offers the interaction to the fragment owner. It handles local
+corrections and same-paragraph deletion into a fragment from outside. At a
+fragment's outer edge, deletion facing outward yields to the remaining owners.
+Character deletion then offers the interaction to the structural owner before
+text handling; word deletion skips that structural claim.
+
+Text handling resolves a supported neighbor in the deletion direction before
+choosing the edit. An otherwise ambiguous paragraph element caret can take a
+validated directional path; other inspection refusals remain refusals. Target
+classification and edit execution share neighbor resolution so they agree on
+which content changes. Neighbor inspection does not allocate proposal identity
+or resolve a proposal: the addressed content's editing rules determine whether
+to create, continue, shorten, or remove pending work.
+
+The [behavior contract](docs/proposal-behavior.md#collapsed-backspace-and-delete)
+owns the resulting proposal and caret behavior.
+
+### Target edits
+
 For ordinary text edits, the kind owner builds a plan and calls
 `$commitTargetEdit`. That module owns offset calculations and caret restoration;
 it may return an effect requesting resolution, which the kind owner executes.
@@ -118,14 +143,14 @@ of live state, not plans to store and replay after another update.
 The [result types](packages/lexical-review/src/ReviewIntent.ts) distinguish
 `Preparation<T>` from `ReviewIntentOutcome<T>`:
 
-| Result | Meaning |
-| --- | --- |
-| Preparation `ready` | This helper succeeded and supplies a value. Target inspection and plan building have not applied the edit; subsequent checks can still refuse. |
-| Preparation `refused` | The helper cannot proceed; the interaction returns the refusal without mutation. |
-| Outcome `changed` | The operation changed state; this can include local input formatting, not necessarily a new proposal. |
-| Outcome `unchanged` | The supported operation needed no change. |
-| Outcome `refused` | An expected unsupported or unsafe interaction; includes a machine-readable code and message. |
-| Outcome `failed` | An unexpected failure reported by a route that handles it; it does not carry the no-mutation refusal guarantee. |
+| Result                | Meaning                                                                                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preparation `ready`   | This helper succeeded and supplies a value. Target inspection and plan building have not applied the edit; subsequent checks can still refuse. |
+| Preparation `refused` | The helper cannot proceed; the interaction returns the refusal without mutation.                                                               |
+| Outcome `changed`     | The operation changed state; this can include local input formatting, not necessarily a new proposal.                                          |
+| Outcome `unchanged`   | The supported operation needed no change.                                                                                                      |
+| Outcome `refused`     | An expected unsupported or unsafe interaction; includes a machine-readable code and message.                                                   |
+| Outcome `failed`      | An unexpected failure reported by a route that handles it; it does not carry the no-mutation refusal guarantee.                                |
 
 **`ready` alone does not prove that no mutation occurred.** The current
 `$commitTargetEdit` also returns `Preparation<TargetEditEffect>` after execution.
