@@ -643,6 +643,48 @@ export function inspectDirectionalProposalDeletionTarget(
   );
 }
 
+/**
+ * Typing entry for collapsed paragraph element carets (#91). Same blink,
+ * same rule as the equivalent text caret: one neighboring insertion is
+ * faced as a proposal-caret at its edge and continues under its ID;
+ * two different neighboring insertions become a separate insertion at the
+ * gap via an accepted-caret. Deletion, formatting, and other neighbors
+ * keep their existing paths: null preserves the refusal.
+ */
+export function inspectTypingNeighborTarget(): ReviewTarget | null {
+  const context = inspectElementCaretContext();
+  if (context === null) return null;
+  const { node, childIndex, selection } = context;
+  const left = node.getChildAtIndex(childIndex - 1);
+  const right = node.getChildAtIndex(childIndex);
+  const leftInsertion = $isReviewInsertionNode(left);
+  const rightInsertion = $isReviewInsertionNode(right);
+  if (
+    leftInsertion &&
+    rightInsertion &&
+    left.getProposalId() !== right.getProposalId()
+  ) {
+    const children = node.getChildren();
+    return {
+      kind: "accepted-caret",
+      paragraph: node,
+      node: null,
+      offset: children
+        .slice(0, childIndex)
+        .reduce((total, child) => total + child.getTextContentSize(), 0),
+      childIndex,
+      selection,
+    };
+  }
+  if (leftInsertion) {
+    return buildNeighborProposalCaret(node, childIndex - 1, true, selection);
+  }
+  if (rightInsertion) {
+    return buildNeighborProposalCaret(node, childIndex, false, selection);
+  }
+  return null;
+}
+
 /** Classify the live selection into one interaction target; maps stay inside. */
 export function inspectReviewTarget(): Preparation<ReviewTarget> {
   const inspection = inspectSelection();

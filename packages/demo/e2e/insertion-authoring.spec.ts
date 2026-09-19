@@ -67,6 +67,7 @@ test("a refused ambiguous edit adds no undo step", async ({ page }) => {
   await page.evaluate(() => {
     window.__insertionFixture!.select(0, 1);
     window.__insertionFixture!.insert("X", "root");
+    window.__insertionFixture!.remove(2, 0, 1);
     window.__insertionFixture!.ambiguous();
   });
   const before = await page.evaluate(() =>
@@ -79,5 +80,5 @@ test("a refused ambiguous edit adds no undo step", async ({ page }) => {
     await page.evaluate(() => window.__insertionFixture!.snapshot()),
   ).toEqual({ ...(before as object), lastOutcome: "refused" });
   await page.evaluate(() => window.__insertionFixture!.undo());
-  await expect(page.getByTestId("insertion-editor")).toHaveText("AB");
+  await expect(page.getByTestId("insertion-editor")).toHaveText("AXB");
 });

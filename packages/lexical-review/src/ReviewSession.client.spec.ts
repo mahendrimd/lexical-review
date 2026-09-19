@@ -867,7 +867,7 @@ describe("node-backed review session targeting", () => {
     unregister();
   });
 
-  it("refuses ambiguous paragraph boundaries and mixed ranges without mutation", async () => {
+  it("types at proposal-adjacent element carets and refuses mixed ranges", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
@@ -884,37 +884,41 @@ describe("node-backed review session targeting", () => {
     await update(editor, () => {
       firstParagraph().select(1, 1);
     });
-    const beforeSelection = editor.getEditorState().read(liveSelection);
-    const beforeDocument = editor.getEditorState().toJSON();
     expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
       true,
     );
     await Promise.resolve();
-    expect(outcomes).toMatchObject([
-      { code: "ambiguous-boundary", status: "refused" },
-    ]);
-    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    editor.getEditorState().read(() => {
+      const insertion = firstParagraph().getChildAtIndex(1);
+      expect(insertion?.getTextContent()).toBe("XB");
+      expect($isElementNode(insertion)).toBe(true);
+      if ($isElementNode(insertion)) {
+        expect((insertion as ReviewInsertionNode).getProposalId()).toBe(
+          "insertion-a",
+        );
+      }
+    });
 
     outcomes.length = 0;
     await update(editor, () => {
       firstParagraph().select(2, 2);
     });
-    const beforeOppositeBoundary = editor.getEditorState().toJSON();
-    const beforeOppositeSelection = editor.getEditorState().read(liveSelection);
     expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "Y")).toBe(
       true,
     );
     await Promise.resolve();
-    expect(outcomes).toMatchObject([
-      { code: "ambiguous-boundary", status: "refused" },
-    ]);
-    expect(editor.getEditorState().toJSON()).toEqual(beforeOppositeBoundary);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeOppositeSelection,
-    );
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    editor.getEditorState().read(() => {
+      const insertion = firstParagraph().getChildAtIndex(1);
+      expect(insertion?.getTextContent()).toBe("XBY");
+      expect($isElementNode(insertion)).toBe(true);
+      if ($isElementNode(insertion)) {
+        expect((insertion as ReviewInsertionNode).getProposalId()).toBe(
+          "insertion-a",
+        );
+      }
+    });
 
     outcomes.length = 0;
     await update(editor, () => {

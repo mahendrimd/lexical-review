@@ -2,16 +2,17 @@ import {
   $getRoot,
   $getSelection,
   $isRangeSelection,
-  $isTextNode,
   CONTROLLED_TEXT_INSERTION_COMMAND,
   TextNode,
   createEditor,
+  type ParagraphNode,
 } from "lexical";
 import {
   $deleteReviewText,
   $inspectReviewProposal,
   $insertReviewText,
   $resolveReviewProposal,
+  $toggleReviewFormatting,
   $isReviewInsertionNode,
   openReviewSession,
   ReviewInsertionNode,
@@ -268,7 +269,7 @@ it("refuses resolution of a disconnected or unknown identity atomically", () => 
   );
 });
 
-it("creates a separate proposal at an incompatible accepted formatting boundary", () => {
+it("continues the faced insertion next to bold accepted text", () => {
   const { editor } = setup([
     text("A"),
     reviewNode("review-insertion", "p", [text("X")]),
@@ -282,13 +283,13 @@ it("creates a separate proposal at an incompatible accepted formatting boundary"
     { discrete: true },
   );
   editor.getEditorState().read(() => {
-    const proposals = $getRoot()
-      .getAllTextNodes()
-      .map((node) => node.getParent())
-      .filter($isReviewInsertionNode);
-    expect(proposals.map((node) => node.getProposalId())).toEqual(["q", "p"]);
-    const child = proposals[0]!.getFirstChild();
-    expect($isTextNode(child) && child.hasFormat("bold")).toBe(true);
+    expect($inspectReviewProposal("p")).toMatchObject({
+      value: { proposal: { text: "BX" } },
+    });
+    expect(insertionIds()).toEqual(["p"]);
+    const nodes = $getRoot().getAllTextNodes();
+    expect(nodes[1]!.getTextContent()).toBe("B");
+    expect(nodes[1]!.hasFormat("bold")).toBe(true);
   });
 });
 
@@ -423,5 +424,97 @@ it.each([false, true])(
       });
     });
     expect(errors).toEqual([]);
+  },
+);
+function insertionIds(): string[] {
+  const ids: string[] = [];
+  for (const node of $getRoot().getAllTextNodes()) {
+    const parent = node.getParent();
+    if ($isReviewInsertionNode(parent)) {
+      const id = parent.getProposalId();
+      if (ids.at(-1) !== id) ids.push(id);
+    }
+  }
+  return ids;
+}
+
+function selectElement(index: number) {
+  ($getRoot().getFirstChildOrThrow() as ParagraphNode).select(index, index);
+}
+
+it.each([
+  ["at the end edge", 2, false, "XYB", [0]],
+  ["at the end edge after a bold toggle", 2, true, "XYB", [0, 1]],
+  ["at the start edge after a bold toggle", 0, true, "BXY", [1, 0]],
+  ["inside after a bold toggle", 1, true, "XBY", [0, 1, 0]],
+] as const)(
+  "typing %s continues one proposal",
+  (_label, offset, bold, expected, formats) => {
+    const { editor } = setup([
+      text("A"),
+      reviewNode("review-insertion", "p", [text("XY")]),
+    ]);
+    editor.update(
+      () => {
+        $getRoot().getAllTextNodes()[1]!.select(offset, offset);
+        if (bold)
+          expect($toggleReviewFormatting("bold").status).toBe("changed");
+        expect(
+          $insertReviewText("B", { proposalIdFactory: () => "q" }).status,
+        ).toBe("changed");
+      },
+      { discrete: true },
+    );
+    expect(
+      editor.getEditorState().read(() => $inspectReviewProposal("p")),
+    ).toMatchObject({ value: { proposal: { text: expected } } });
+    const observed = editor.getEditorState().read(() => {
+      const nodes = $getRoot().getAllTextNodes().slice(1);
+      return {
+        ids: insertionIds(),
+        texts: nodes.map((node) => node.getTextContent()),
+        formats: nodes.map((node) => node.getFormat()),
+      };
+    });
+    expect(observed.ids).toEqual(["p"]);
+    expect(observed.texts.join("")).toBe(expected);
+    expect(observed.formats).toEqual([...formats]);
+  },
+);
+
+it.each([
+  ["next to plain text", false, ["A", "BX"], [0, 0]],
+  ["next to bold text", true, ["A", "B", "X"], [1, 1, 0]],
+] as const)(
+  "typing from an element caret %s continues the faced insertion",
+  (_label, boldAccepted, texts, formats) => {
+    const { editor } = setup([
+      text("A"),
+      reviewNode("review-insertion", "p", [text("X")]),
+    ]);
+    editor.update(
+      () => {
+        if (boldAccepted) $getRoot().getAllTextNodes()[0]!.setFormat(1);
+        selectElement(1);
+        expect(
+          $insertReviewText("B", { proposalIdFactory: () => "q" }).status,
+        ).toBe("changed");
+      },
+      { discrete: true },
+    );
+    expect(
+      editor.getEditorState().read(() => $inspectReviewProposal("p")),
+    ).toMatchObject({ value: { proposal: { text: "BX" } } });
+    const observed = editor.getEditorState().read(() => {
+      const nodes = $getRoot().getAllTextNodes();
+      return {
+        ids: insertionIds(),
+        texts: nodes.map((node) => node.getTextContent()),
+        formats: nodes.map((node) => node.getFormat()),
+      };
+    });
+    expect(observed.ids).toEqual(["p"]);
+    expect(observed.texts).toEqual([...texts]);
+    expect(observed.formats).toEqual([...formats]);
   },
 );

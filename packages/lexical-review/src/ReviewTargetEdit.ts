@@ -1348,9 +1348,35 @@ function commitDeleteAcceptedCaret(
 }
 
 /**
+ * Continue typed text into the faced edge run and leave the caret after
+ * it: append at its end, prepend at its start. The insertion keeps its
+ * ID; a toggled format forks a node as interior typing does. Shared by
+ * the text-caret and element-caret paths so the two positions agree.
+ */
+function continueIntoBoundaryEdge(
+  boundary: TextNode,
+  run: ReviewEditRun,
+  append: boolean,
+): Preparation<TargetEditEffect> {
+  if (boundary.getFormat() !== run.format) {
+    const inserted = $createTextNode(run.text).setFormat(run.format);
+    if (append) boundary.insertAfter(inserted);
+    else boundary.insertBefore(inserted);
+    inserted.selectEnd();
+    return mutated();
+  }
+  const offset = append ? boundary.getTextContentSize() : 0;
+  boundary.spliceText(offset, 0, run.text, true);
+  boundary.select(offset + run.text.length, offset + run.text.length);
+  return mutated();
+}
+
+/**
  * Adjacent-insertion continuation for text typing. Returns null when no
  * continuation applies and the caller falls through to fresh insertion.
  * The inspectProposalKind refusal propagates before any mutation.
+ * Typed formatting never splits the faced insertion: it continues under
+ * its ID holding mixed formatting, as interior typing already does.
  */
 function tryContinueAdjacentInsertion(
   target: AcceptedCaretTarget,
@@ -1364,21 +1390,38 @@ function tryContinueAdjacentInsertion(
       : atEnd
         ? target.node.getNextSibling()
         : null;
-    if ($isReviewInsertionNode(adjacent)) {
-      const kind = inspectProposalKind(adjacent.getProposalId());
-      if (kind.status !== "ready") return kind;
-      const boundary = atStart
-        ? adjacent.getLastChild()
-        : adjacent.getFirstChild();
-      if ($isTextNode(boundary) && boundary.getFormat() === run.format) {
-        const offset = atStart ? boundary.getTextContentSize() : 0;
-        boundary.spliceText(offset, 0, run.text, true);
-        boundary.select(offset + run.text.length, offset + run.text.length);
-        return mutated();
-      }
-    }
+    if (!$isReviewInsertionNode(adjacent)) return null;
+    const kind = inspectProposalKind(adjacent.getProposalId());
+    if (kind.status !== "ready") return kind;
+    const boundary = atStart
+      ? adjacent.getLastChild()
+      : adjacent.getFirstChild();
+    if (!$isTextNode(boundary)) return null;
+    return continueIntoBoundaryEdge(boundary, run, atStart);
   }
-  return null;
+  // Element caret: same rule at the same visual position. One neighboring
+  // insertion is faced like the equivalent text caret; two different
+  // proposals stay separate with a fresh insertion at the gap.
+  const children = target.paragraph.getChildren();
+  const left = children[target.childIndex - 1];
+  const right = children[target.childIndex];
+  const leftInsertion = $isReviewInsertionNode(left) ? left : null;
+  const rightInsertion = $isReviewInsertionNode(right) ? right : null;
+  if (
+    leftInsertion !== null &&
+    rightInsertion !== null &&
+    leftInsertion.getProposalId() !== rightInsertion.getProposalId()
+  ) {
+    return null;
+  }
+  const facing = leftInsertion ?? rightInsertion;
+  if (facing === null) return null;
+  const kind = inspectProposalKind(facing.getProposalId());
+  if (kind.status !== "ready") return kind;
+  const append = facing === leftInsertion;
+  const boundary = append ? facing.getLastChild() : facing.getFirstChild();
+  if (!$isTextNode(boundary)) return null;
+  return continueIntoBoundaryEdge(boundary, run, append);
 }
 
 function insertRunsAtAcceptedPoint(
