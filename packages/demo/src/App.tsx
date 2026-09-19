@@ -10,7 +10,7 @@ import "./index.css";
 import ScenarioRailDemo from "./ScenarioRailDemo";
 
 const AUTHORING_DOCS_URL =
-  "https://github.com/mahendrimd/lexical-review/blob/main/packages/lexical-review/README.md#version-3-review-session-authoring";
+  "https://github.com/mahendrimd/lexical-review/blob/main/packages/lexical-review/README.md";
 
 function App() {
   const initialConfig = {

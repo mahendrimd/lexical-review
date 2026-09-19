@@ -14,80 +14,34 @@
 - Lexical formatting and inline styles are preserved inside review markers (`<ins>`/`<del>` outermost).
 - Native review documents serialize accepted content plus current pending proposals only.
 
-See the [session API](packages/lexical-review/README.md#pending-insertion-proposals).
+See the [proposal behavior contract](docs/proposal-behavior.md) for proposal kinds, editing rules, and resolution effects.
 
-## Installation
+## Getting started
 
-The package declares Lexical peer compatibility `>=0.47.0 <0.51.0`.
-The `lexical`, `@lexical/react`, `@lexical/clipboard`, and `@lexical/utils`
-packages must use the same version:
+Start with the [package guide](packages/lexical-review/README.md):
 
-```bash
-npm install lexical-review \
-  'lexical@>=0.47.0 <0.51.0' \
-  '@lexical/react@>=0.47.0 <0.51.0' \
-  '@lexical/clipboard@>=0.47.0 <0.51.0' \
-  '@lexical/utils@>=0.47.0 <0.51.0' \
-  react react-dom
-```
+1. [Install the package and its peers](packages/lexical-review/README.md#installation).
+2. [Choose the core or client entrypoint](packages/lexical-review/README.md#entrypoints).
+3. [Open a review document and register a session](packages/lexical-review/README.md#core-loop).
+4. [Author and resolve proposals](packages/lexical-review/README.md#authoring-operations).
 
-The package declares React peer compatibility for React 18 and React 19, and
-`react` and `react-dom` must use the same version. CI exercises the supported
-Lexical minors and browser boundary scenarios in Chromium, Firefox, and
-Playwright WebKit. Playwright WebKit results do not certify native Safari or
-iOS Safari.
+The [live demo](https://mahendrimd.github.io/lexical-review/) lets you explore
+review interactions before integrating them into your application.
 
-## Quick start
+## Documentation
 
-Open a native v3 review document against a Lexical editor and register the session route:
-
-```tsx
-import { LexicalComposer } from "@lexical/react/LexicalComposer";
-import { ContentEditable } from "@lexical/react/LexicalContentEditable";
-import {
-  openReviewSession,
-  ReviewBoundaryNode,
-  ReviewDeletionNode,
-  ReviewFormattingNode,
-  ReviewFragmentNode,
-  ReviewInsertionNode,
-} from "lexical-review";
-import { ReviewSessionPlugin } from "lexical-review/client";
-
-const initialConfig = {
-  namespace: "review-editor",
-  onError(error: Error) {
-    throw error;
-  },
-  nodes: [
-    ReviewInsertionNode,
-    ReviewDeletionNode,
-    ReviewFormattingNode,
-    ReviewFragmentNode,
-    ReviewBoundaryNode,
-  ],
-};
-
-const session = openReviewSession(editor, initialDocument);
-if (session.status !== "valid") {
-  throw new Error(session.issues[0]?.message ?? "Invalid review document.");
-}
-
-export function ReviewEditor() {
-  return (
-    <LexicalComposer initialConfig={initialConfig}>
-      <ReviewSessionPlugin session={session.value} />
-      <ContentEditable aria-label="Review editor" />
-    </LexicalComposer>
-  );
-}
-```
-
-`ReviewSessionPlugin` routes typing, deletion, formatting, structural, clipboard, and composition input through the same v3 semantic operations. For a non-React integration, call `registerReviewSession(editor, session)` directly and keep the returned cleanup function.
+| If you want to…                           | Read                                                                                                             |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Integrate review mode into an application | [Package guide](packages/lexical-review/README.md) — installation, entrypoints, session lifecycle, and API usage |
+| Understand what editing and resolution do | [Proposal behavior](docs/proposal-behavior.md) — proposal kinds, editing rules, and observable outcomes          |
+| Understand or change the implementation   | [Architecture](ARCHITECTURE.md) — state ownership, interaction lifecycle, and guarantees                         |
+| Clarify a domain term                     | [Vocabulary](CONTEXT.md) — shared definitions and distinctions                                                   |
+| Work with WER interchange                 | [Interchange package](packages/lexical-review-wer/README.md) — current export boundary and limitations           |
+| Understand a recorded design decision     | [Architecture decisions](docs/adr/) — lasting choices and their rationale                                        |
 
 ## Development
 
-The repository requires Node `^22.13.0` or `>=24` and pnpm `11`.
+The library lives in `packages/lexical-review`, the demo lives in `packages/demo`, and focused tests are co-located with the library source. The repository requires Node `^22.13.0` or `>=24` and pnpm `11`.
 
 ```bash
 pnpm install
@@ -95,22 +49,10 @@ pnpm dev                         # start the demo
 pnpm test --run                  # run unit tests
 pnpm test:package                # build and verify the published package entrypoints
 pnpm test:e2e                    # run Playwright tests
-pnpm test:e2e:install            # install Chromium, Firefox, and Playwright WebKit on Linux
-pnpm test:e2e:webkit             # run only the Playwright WebKit project
-pnpm test:e2e:install:webkit     # install only Playwright WebKit on Linux
 pnpm build:demo                  # build the demo
 pnpm --filter lexical-review build
 pnpm lint
 pnpm compatibility               # run configured Lexical compatibility checks
-pnpm compatibility -- --version 0.48.0 # run a focused exact-version lane
-pnpm compatibility:e2e -- --version 0.47.0 --react-version 19.2.3
-pnpm compatibility:e2e -- --version 0.47.0 --react-version 18.3.1 --project chromium
 ```
-
-The Lexical compatibility workflow can also be dispatched with an exact
-`version` input for a temporary browser-risk lane; it reuses the same boundary
-workflow without adding a permanent matrix entry.
-
-The library lives in `packages/lexical-review`, the demo lives in `packages/demo`, and focused tests are co-located with the library source.
 
 Contributions and issue reports are welcome. Please include a focused reproduction or test when changing review behavior.
