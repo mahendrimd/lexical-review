@@ -66,6 +66,23 @@ test("collapsed toggles format only future native typing and movement adopts the
   ).toMatchObject({ document: { status: "valid" } });
 });
 
+test("collapsed toggle survives continued native typing in one proposal", async ({
+  page,
+}) => {
+  const editor = page.getByTestId("formatting-editor");
+  await page.evaluate(() => window.__formattingFixture!.select(0, 2));
+  await page.keyboard.press("Control+i");
+  await page.keyboard.type("XYZ");
+  await expect(editor.locator("ins")).toHaveCount(1);
+  await expect(editor.locator("ins em")).toHaveText("XYZ");
+  expect(
+    await page.evaluate(() => window.__formattingFixture!.snapshot()),
+  ).toMatchObject({
+    selection: { format: 2 },
+    document: { status: "valid" },
+  });
+});
+
 test("native typing cannot mutate a pending formatting target", async ({
   page,
 }) => {
