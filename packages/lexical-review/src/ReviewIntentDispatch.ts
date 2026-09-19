@@ -21,6 +21,7 @@ import {
   inspectDirectionalDeletionTarget,
   inspectDirectionalProposalDeletionTarget,
   inspectReviewTarget,
+  inspectTypingNeighborTarget,
 } from "./ReviewTargeting";
 
 /**
@@ -85,7 +86,13 @@ export function $insertReviewText(
   }
   const inspection = inspectReviewTarget();
   if (inspection.status !== "ready") {
-    return inspection;
+    // Element-gap parity (#91): only the element-boundary ambiguity is
+    // eligible for neighbor typing; every other refusal passes through
+    // untouched.
+    if (inspection.code !== "ambiguous-boundary") return inspection;
+    const neighbor = inspectTypingNeighborTarget();
+    if (neighbor === null) return inspection;
+    return $claimTextInsertion(neighbor, text, options);
   }
   return $claimTextInsertion(inspection.value, text, options);
 }

@@ -22,8 +22,9 @@
  *   ("cancels the entire replacement on %s", "rejects cross-paragraph shared identity").
  * - insertion/deletion continuation and terminal boundaries —
  *   ReviewIntentDispatch.spec (typing/deletion ownership rows).
- * - separate creation at incompatible formatting boundaries — ReviewText.spec
- *   ("creates a separate proposal at an incompatible accepted formatting boundary").
+ * - continuation of the faced insertion next to bold accepted text —
+ *   ReviewText.spec ("continues the faced insertion next to bold accepted
+ *   text").
  *
  * Rows below cover the remaining cells: coexistence permits, untested
  * refusals, live/import agreement on shared-identity violations, no-op
@@ -272,22 +273,36 @@ describe("compatibility matrix: coexistence permits", () => {
 });
 
 describe("compatibility matrix: refusals preserve state and selection", () => {
-  it("typing at an element caret between two insertions is ambiguous", () => {
-    const { update, snapshot } = setup([
+  it("typing at an element caret between two insertions authors a separate proposal", () => {
+    const { update, read } = setup([
       paragraph([
         reviewNode("review-insertion", "a", [text("x")]),
         reviewNode("review-insertion", "b", [text("y")]),
       ]),
     ]);
     update(() => $getRoot().getFirstChildOrThrow<ParagraphNode>().select(1, 1));
-    const before = snapshot();
     update(() =>
       expect($insertReviewText("z", id("c"))).toMatchObject({
-        status: "refused",
-        code: "ambiguous-boundary",
+        status: "changed",
       }),
     );
-    expect(snapshot()).toEqual(before);
+    expect(
+      read(() =>
+        $getRoot()
+          .getAllTextNodes()
+          .map((node) => node.getTextContent())
+          .join(""),
+      ),
+    ).toBe("xzy");
+    for (const [proposalId, expected] of [
+      ["a", "x"],
+      ["c", "z"],
+      ["b", "y"],
+    ] as const) {
+      expect(read(() => $inspectReviewProposal(proposalId))).toMatchObject({
+        value: { proposal: { text: expected } },
+      });
+    }
   });
 
   it("fragment creation at an unresolved split boundary is refused", () => {

@@ -466,7 +466,7 @@ describe("composition normalization (#64)", () => {
     unregister();
   });
 
-  it("refuses composition at an ambiguous proposal boundary", async () => {
+  it("commits composition at a proposal-adjacent element caret into the faced insertion", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
@@ -483,18 +483,13 @@ describe("composition normalization (#64)", () => {
     await update(editor, () => {
       firstParagraph().select(1, 1);
     });
-    const beforeDocument = editor.getEditorState().toJSON();
-    const beforeSelection = editor.getEditorState().read(liveSelection);
     await startComposition(editor);
     await commitComposition(editor, "あ");
 
-    expect(outcomes).toMatchObject([
-      { code: "ambiguous-boundary", status: "refused" },
-    ]);
-    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    expect(
+      editor.getEditorState().read(() => firstParagraph().getTextContent()),
+    ).toBe("AあBC");
     unregister();
   });
 

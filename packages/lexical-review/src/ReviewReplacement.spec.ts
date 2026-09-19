@@ -14,9 +14,11 @@ import {
   $deleteReviewText,
   $inspectReviewProposal,
   $insertReviewText,
+  $isReviewInsertionNode,
   $replaceReviewText,
   $resolveReviewProposal,
   $resolveReviewProposals,
+  $toggleReviewFormatting,
   openReviewSession,
   ReviewDeletionNode,
   ReviewInsertionNode,
@@ -413,4 +415,61 @@ it("empty controlled replacement input cancels a replacement and uses deletion s
   ).toBe("review-deletion");
   expect(session.exportDocument().status).toBe("valid");
   unregister();
+});
+
+it.each([false, true])(
+  "typing at the replacement new-side edge continues under its ID (bold=%s)",
+  (bold) => {
+    const { update, read } = setup([oldSide(), newSide()]);
+    update(() => {
+      $getRoot().getAllTextNodes()[1]!.selectEnd();
+      if (bold) expect($toggleReviewFormatting("bold").status).toBe("changed");
+      expect(
+        $insertReviewText("Y", { proposalIdFactory: () => "q" }).status,
+      ).toBe("changed");
+    });
+    expect(read(() => $inspectReviewProposal("p"))).toMatchObject({
+      value: {
+        kind: "replacement",
+        proposal: {
+          proposalId: "p",
+          oldText: "old",
+          newText: "newY",
+        },
+      },
+    });
+    expect(
+      read(() =>
+        $getRoot()
+          .getFirstChildOrThrow()
+          .getChildren()
+          .filter($isReviewInsertionNode),
+      ),
+    ).toHaveLength(1);
+  },
+);
+
+it("typing at the replacement inner seam corrects the new side", () => {
+  const { update, read } = setup([oldSide(), newSide()]);
+  update(() => {
+    $getRoot().getAllTextNodes()[1]!.selectStart();
+    expect($toggleReviewFormatting("bold").status).toBe("changed");
+    expect(
+      $insertReviewText("B", { proposalIdFactory: () => "q" }).status,
+    ).toBe("changed");
+  });
+  expect(read(() => $inspectReviewProposal("p"))).toMatchObject({
+    value: {
+      kind: "replacement",
+      proposal: { proposalId: "p", oldText: "old", newText: "Bnew" },
+    },
+  });
+  expect(
+    read(() =>
+      $getRoot()
+        .getFirstChildOrThrow()
+        .getChildren()
+        .filter($isReviewInsertionNode),
+    ),
+  ).toHaveLength(1);
 });

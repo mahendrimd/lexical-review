@@ -10,6 +10,7 @@ import {
   HISTORY_PUSH_TAG,
 } from "lexical";
 import {
+  $deleteReviewText,
   $inspectReviewProposal,
   $insertReviewText,
   $resolveReviewProposal,
@@ -78,6 +79,15 @@ export function InsertionFixture() {
           { discrete: true, tag: HISTORY_PUSH_TAG },
         );
       },
+      remove(index: number, start: number, end: number) {
+        editor.update(
+          () => {
+            $getRoot().getAllTextNodes()[index]!.select(start, end);
+            lastOutcome = $deleteReviewText(false).status;
+          },
+          { discrete: true, tag: HISTORY_PUSH_TAG },
+        );
+      },
       settle(action: "accept" | "reject" | "remove") {
         editor.update(
           () => {
@@ -89,8 +99,14 @@ export function InsertionFixture() {
       ambiguous() {
         editor.update(
           () => {
+            // Trailing element gap: insertion-adjacent gaps now type under
+            // #91, so the refusal probe rests against a deletion proposal.
             const paragraph = $getRoot().getFirstChildOrThrow();
-            if ($isElementNode(paragraph)) paragraph.select(1, 1);
+            if ($isElementNode(paragraph))
+              paragraph.select(
+                paragraph.getChildrenSize(),
+                paragraph.getChildrenSize(),
+              );
           },
           { discrete: true },
         );
@@ -135,6 +151,7 @@ declare global {
       select(index: number, start: number, end?: number): void;
       insert(value: string, route: "root" | "client"): void;
       settle(action: "accept" | "reject" | "remove"): void;
+      remove(index: number, start: number, end: number): void;
       ambiguous(): void;
       undo(): void;
       snapshot(): {
