@@ -86,11 +86,11 @@ export abstract class ReviewElementNode extends ElementNode {
     return this.getLatest().__extensions;
   }
 
-  override canInsertTextBefore(): false {
+  override canInsertTextBefore(): boolean {
     return false;
   }
 
-  override canInsertTextAfter(): false {
+  override canInsertTextAfter(): boolean {
     return false;
   }
 
@@ -133,6 +133,16 @@ export abstract class ReviewElementNode extends ElementNode {
 export class ReviewInsertionNode extends ReviewElementNode {
   static override getType(): string {
     return "review-insertion";
+  }
+
+  // Continued typing rests at the end of this wrapper, so Lexical's
+  // DOM-read boundary normalization must keep that caret proposal-side.
+  // With the base `false`, a caret at the end of multi-character insertion
+  // content is pushed out to following accepted text, which drops the
+  // selection format (e.g. a bold toggle) and splits continued typing into
+  // a fresh proposal. Native insertion still routes through review intents.
+  override canInsertTextAfter(): boolean {
+    return true;
   }
 
   static override clone(node: ReviewInsertionNode): ReviewInsertionNode {
