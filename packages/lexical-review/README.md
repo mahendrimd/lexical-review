@@ -1,5 +1,9 @@
 # lexical-review
 
+See the [proposal behavior contract](../../docs/proposal-behavior.md) for proposal
+kinds, identity-preserving edits, cancellation, and resolution. This guide
+provides API usage and integration details.
+
 ## Installation
 
 ```bash
@@ -100,17 +104,11 @@ and unsupported targets are refused before mutation. Unexpected implementation
 errors propagate to Lexical's update error handling and rollback; do not catch
 and swallow them inside the update callback.
 
-Typing from an accepted text boundary continues an adjacent insertion when its
-formatting matches. Typing or replacing a range inside one insertion corrects
-that proposal in place. A paragraph element boundary adjacent to a proposal
-is ambiguous and is refused. Deleting all insertion content removes the
-proposal. The caret follows newly inserted or corrected content.
-
-Acceptance unwraps the insertion into accepted text, preserving formatting.
-Rejection removes the proposed text. Removal also removes pending
-work, but expresses author removal rather than a review decision; it resolves
-identically to rejection. None adds a terminal record to native JSON. Resolution
-refuses missing, disconnected, or structurally unsupported identities.
+Insertion content remains editable under its proposal ID. See the behavior
+contract for [typing and formatting continuation](../../docs/proposal-behavior.md#typing-and-inline-formatting),
+[selected-range corrections](../../docs/proposal-behavior.md#selected-range-replacement-and-deletion),
+and [resolution effects](../../docs/proposal-behavior.md#proposal-kinds-and-resolution).
+Resolution refuses missing, disconnected, or structurally unsupported identities.
 
 ## Pending deletion authoring
 
@@ -121,35 +119,14 @@ registration handles Backspace, Delete, word deletion, and range removal through
 the same operation. Word deletion consumes adjacent whitespace and one Unicode
 letter/number/mark or punctuation run, bounded by accepted text or one proposal.
 
-Creation assigns identity immediately. Forward continuation appends accepted
-text to the deletion on its left; backward continuation prepends accepted text
-to the deletion on its right. Formatting stays on the nested text nodes. The
-caret moves to the accepted continuation side. Same-paragraph ranges can extend
-a compatible adjacent deletion in the requested direction. No draft, settlement
-step, or saved coordinate record is involved.
-
-A nonempty deletion intention inside a pending deletion restores that whole
-proposal's accepted text and removes the proposal. Inside a pending insertion,
-it removes only the targeted insertion text. A collapsed caret at a proposal
-edge adjacent to a neighboring proposal addresses that neighbor in the deletion
-direction: independent insertions and replacement new sides shrink (emptying
-the new side cancels the replacement); independent deletions whole-restore;
-replacement old sides whole-cancel for both character and word; formatting
-neighbors refuse. At the replacement seam, backward cancels while forward
-shrinks the new side. Fragment-outward deletions address the outside neighbor
-with the source fragment unchanged; an outside caret at its edge adjacent to
-fragment content in the same paragraph corrects inward under the fragment's
-ID (fragment-local deletion and caret, as from inside); across paragraphs,
-the existing structural/refusal paths apply. Fragment-internal newlines delete as one
-unit. Each keypress re-applies the rule to the resulting position, and
-independent identities never merge. Cross-paragraph and ambiguous ranges retain
-their existing refusals without mutation.
+Deletion can create pending work or correct an existing proposal, depending on
+the target. The behavior contract defines [selected-range deletion](../../docs/proposal-behavior.md#selected-range-replacement-and-deletion)
+and [collapsed Backspace/Delete](../../docs/proposal-behavior.md#collapsed-backspace-and-delete),
+including continuation, neighbor targeting, caret placement, and repeated keys.
 
 `$inspectReviewProposal(proposalId)` reads current node content inside an editor
-read/update, tagged with `kind: "deletion"`. `$resolveReviewProposal(proposalId,
-action)` accepts the deletion by removing its text, or rejects/removes it by
-restoring the accepted text. These update operations retain no terminal record. Saving and
-reopening preserves current pending identities and formatting.
+read/update, tagged with `kind: "deletion"`. Use `$resolveReviewProposal` for the
+[standard resolution actions](../../docs/proposal-behavior.md#proposal-kinds-and-resolution).
 
 ## Pending replacement proposals
 
@@ -165,21 +142,14 @@ same-type wrappers can normalize within a side. Every occurrence of an identity
 must form one contiguous group in one paragraph; accepted text, other proposals,
 reversed sides, nested content, and fragments cannot divide the group.
 
-Typing or replacing entirely within the new side retains the identity. Deleting
-the last new text cancels the whole replacement and restores the old text.
-Deleting against the old side also cancels the replacement, including forward
-deletion from an adjacent accepted text boundary. Typing over the old side or
-editing across both sides is refused without changing content or selection.
+The old and new sides form one review decision. See the behavior contract for
+[selected-range corrections](../../docs/proposal-behavior.md#selected-range-replacement-and-deletion)
+and [directional deletion at either side or their seam](../../docs/proposal-behavior.md#collapsed-backspace-and-delete).
 
 `$inspectReviewProposal(proposalId)` returns `kind: "replacement"` with `oldText`
-and `newText` from the live nodes. `$resolveReviewProposal(proposalId, "accept")`
-keeps the new content; `"reject"` and `"remove"` keep the old content.
-No API resolves one replacement side independently.
-
-For a batch, call `$resolveReviewProposals(ids, "accept" | "reject" | "remove")`
-inside `editor.update()`. It validates every group before mutation and resolves
-each identity once. Saving preserves pending shared identities and never changes
-the authoring session's input document.
+and `newText` from the live nodes. Resolve the whole replacement with
+`$resolveReviewProposal`, or include its ID in `$resolveReviewProposals` for a
+batch. See [resolution effects](../../docs/proposal-behavior.md#proposal-kinds-and-resolution).
 
 Through a registered session, the same settlement is available as
 `RESOLVE_REVIEW_PROPOSALS_COMMAND` from `lexical-review/client` with payload
@@ -226,27 +196,16 @@ has it, and applies it otherwise. Explicit values that already match are no-ops:
 they do not split text or allocate identity. Creation preserves the selected
 text endpoints and forward/backward orientation.
 
-A selection within one formatting proposal can update its current formatting
-without changing identity. Returning its entire target to the accepted
-formatting removes the proposal. Formatting insertion text or a replacement's
-new side updates that existing proposal without adding an independently
-reviewable formatting change. Formatting deletion text or a replacement's old
-side is refused. Selections crossing paragraphs, proposal identities, or
-accepted/proposal sides, unsupported properties, and ambiguous targets are
-refused without mutation. Text insertion and deletion within a pending
-formatting target are also refused; resolve the formatting proposal first.
-
-A collapsed toggle changes only future local input formatting and creates no
-proposal. Session registration recomputes that input formatting when the caret
-moves. Ordinary typing uses it for new text, including new formatting runs
-inside an existing insertion proposal.
+For edits to existing proposals and unsupported selections, see
+[formatting existing content](../../docs/proposal-behavior.md#formatting-existing-content).
+For collapsed toggles and formatting used by subsequent typing, see
+[typing and inline formatting](../../docs/proposal-behavior.md#typing-and-inline-formatting).
 
 `registerReviewSession` routes `FORMAT_TEXT_COMMAND`, `SET_TEXT_FORMAT_COMMAND`,
 and the supported native formatting `beforeinput` intentions through the same
-operations. Outcomes are delivered through `onOutcome`. Inspection and `$resolveReviewProposal` read the current node-backed
-state, tagged with `kind: "formatting"`. Saving preserves pending accepted/current formatting, without storing
-resolved proposal history. Insertion and deletion DOM wrappers remain outermost;
-Lexical text formatting and theme classes stay inside them.
+operations. Outcomes are delivered through `onOutcome`. Inspection reads the
+current state, tagged with `kind: "formatting"`. The [rendering contract](#rendering-contract)
+also applies to formatted text.
 
 ### Pending paragraph boundaries
 
@@ -278,10 +237,7 @@ it belongs to the original right paragraph. Unmodified left/right arrow keys
 cross the marker explicitly, including between empty sides. Input formatting
 comes from the corresponding adjacent content, falling back to that side's
 saved paragraph formatting when empty. A local formatting toggle overrides it.
-Enter at either side of this marker cancels the merge. Backspace at a pending
-split's right-paragraph start (or Delete at its left-paragraph end) cancels the
-split. Cancellation preserves subsequent text proposals and creates no opposite
-proposal or terminal history.
+The behavior contract defines the [gestures that cancel pending boundaries](../../docs/proposal-behavior.md#paragraph-boundaries).
 
 Repeated splits retain separate identities: splitting `abcdef` after `b` and
 then `d` gives `ab | cd | ef`. Rejecting the first split leaves `abcd | ef`;
@@ -327,22 +283,16 @@ inheritance, with an explicit local formatting choice taking precedence. An
 accepted-side empty position falls back to its paragraph's text format when no
 adjacent accepted text supplies a format.
 
-Typing, formatting, replacement, range/word/character deletion, subsequent
-fragment insertion, and Enter within one fragment correct its current payload
-under the same ID. Backspace/Delete at an internal boundary removes that
-boundary locally. Mixed accepted/proposal ranges and independently nested work
-are refused without mutation. Proposal-side typing continues the fragment;
-accepted-side typing or deletion authors separate work. Left/right arrows cross
-both outer associations explicitly, including empty endpoints. After insertion,
-the caret is proposal-side immediately after the new content.
+Supported edits correct a fragment as one proposal. See the
+[atomic fragment contract](../../docs/proposal-behavior.md#atomic-fragments) for
+editing, normalization to another proposal kind, and removal, and the
+[directional deletion rules](../../docs/proposal-behavior.md#collapsed-backspace-and-delete)
+for its outer edges. Left/right arrows cross both outer associations explicitly,
+including empty endpoints. After insertion, the caret is proposal-side
+immediately after the new content.
 
-Use `$inspectReviewProposal` or `$resolveReviewProposal` for whole-proposal behavior.
-Components cannot resolve independently. Resolution uses current attachment and
-preserves unrelated work; it never restores a creation-time paragraph snapshot.
-A fragment reduced to one inline insertion or one boundary-only split normalizes
-to that kind with the same ID. Several remaining boundaries stay atomic; deleting
-the entire payload removes the semantic no-op. Re-inspect after normalization to
-read the current kind, or use batch resolution.
+Use `$inspectReviewProposal` or `$resolveReviewProposal` for whole-proposal
+operations. Re-inspect after editing to read the current kind.
 
 An independent split on accepted text may coexist with a fragment. For example,
 split `ABCD` after `C`, then insert `x` / `y` after `A`: `Ax` / `yBC` / `D`.
