@@ -1,24 +1,13 @@
 /**
- * Target-owned edit mechanics: intent-level plans plus a single commit seam.
+ * Target-owned edit mechanics. Insertion and paste use declarative plans;
+ * deletion prepares its directional target, offsets, and continuation once
+ * before immediate execution. Kind owners pass preparation through without
+ * inspecting its mechanics and execute any requested proposal resolution.
  *
- * Kind owners (ReviewText, ReviewPaste) classify once via
- * inspectReviewTarget(), build a declarative plan from scalar inputs, and
- * make exactly one $commitTargetEdit() call. No maps, spans, entries,
- * offsets, caret placement, or internal remapping cross the kind-owner
- * seam; the commit implementation below walks the read-only offset maps
- * it imports from ReviewTargetMaps.
- *
- * Ownership:
- * - Kind owners decide granularity, runs, identity policy (fresh / continue /
- *   reuse-continuation), the identity factory, and all purely-decidable
- *   supported-edit policy (expressed as builder refusals).
- * - Commit owns measurement-bound selection (full-erase and adjacency
- *   resolution) against the spec-pinned mapping, plus all offset math,
- *   mutation, and caret restore. Resolution execution stays kind-owned: the
- *   commit only ever *requests* resolution via the effect type.
- *
- * Targets are single-use within one editor update. Re-classification
- * continues the same intent; it never creates a new one.
+ * Prepared deletions are single-use within one editor update, with no
+ * intervening mutation. Cut discards its read-only preflight preparation and
+ * prepares again after writing the clipboard. Identity allocation remains
+ * in execution, so preflight cannot consume an identity.
  *
  * Refusal contract: every returned refusal exits before the first mutating
  * call (splitText, spliceText, append, insertBefore/After, remove, select).
@@ -110,26 +99,8 @@ export type ReviewEditRegistration = Readonly<{
   action: "authoring" | "pasting";
 }>;
 
-export type ReviewTargetEditPlan =
-  | Readonly<{
-      kind: "delete-proposal-caret";
-      backward: boolean;
-      granularity: "character" | "word";
-    }>
-  | Readonly<{ kind: "delete-proposal-range" }>
-  | Readonly<{
-      kind: "delete-accepted-caret";
-      backward: boolean;
-      granularity: "character" | "word";
-      identityOptions: ReviewAuthoringOptions;
-      registration: ReviewEditRegistration;
-    }>
-  | Readonly<{
-      kind: "delete-accepted-range";
-      backward: boolean;
-      identityOptions: ReviewAuthoringOptions;
-      registration: ReviewEditRegistration;
-    }>
+/** Insertion and paste plans cannot request proposal resolution. */
+export type NonResolvingEditPlan =
   | Readonly<{
       kind: "insert-runs-at-caret";
       runs: readonly ReviewEditRun[];
@@ -159,18 +130,6 @@ export type ReviewTargetEditPlan =
       kind: "correct-proposal-range-with-runs";
       runs: readonly ReviewEditRun[];
     }>;
-
-/** Plans whose commit can request (never perform) proposal resolution. */
-export type ResolvingEditPlan = Extract<
-  ReviewTargetEditPlan,
-  { kind: `delete-${string}` }
->;
-
-/** Plans whose commit only ever mutates, reports no-op, or refuses. */
-export type NonResolvingEditPlan = Exclude<
-  ReviewTargetEditPlan,
-  ResolvingEditPlan
->;
 
 export type TargetEditEffect =
   | Readonly<{ kind: "mutated" }>
@@ -221,7 +180,7 @@ function noOp(): Preparation<TargetEditEffect> {
  * Target-owned edit mechanics: accepted-deletion math, proposal-deletion
  * preparation, span isolation, proposal-range mutation, and caret restore.
  * Single-consumer helpers owned here so all commit mutation lives behind the
- * $commitTargetEdit seam. Offset maps, entry resolution, and span slicing
+ * commit functions. Offset maps, entry resolution, and span slicing
  * live in the ReviewTargetMaps leaf and are imported, never duplicated; the
  * proposal-kind oracle stays owned by ReviewTargeting.
  */
@@ -703,56 +662,6 @@ export function replaceProposalRange(
   return changed();
 }
 
-/** Text deletion plan. Pure: no editor reads, no editor writes. */
-export function buildTextDeletionPlan(
-  targetKind: ReviewTarget["kind"],
-  side: SelectedWrapperSide | null,
-  backward: boolean,
-  granularity: "character" | "word",
-  options: ReviewAuthoringOptions,
-): Preparation<ResolvingEditPlan> {
-  if (
-    (targetKind === "proposal-caret" || targetKind === "proposal-range") &&
-    side === "formatting"
-  ) {
-    // First check of prepareProposal{Caret,Range}Deletion, preserved verbatim.
-    return refusal(
-      "unsupported-proposal-edit",
-      "Text deletion cannot alter a pending formatting target.",
-    );
-  }
-  if (targetKind === "proposal-caret") {
-    return {
-      status: "ready",
-      value: { kind: "delete-proposal-caret", backward, granularity },
-    };
-  }
-  if (targetKind === "proposal-range") {
-    return { status: "ready", value: { kind: "delete-proposal-range" } };
-  }
-  if (targetKind === "accepted-caret") {
-    return {
-      status: "ready",
-      value: {
-        kind: "delete-accepted-caret",
-        backward,
-        granularity,
-        identityOptions: options,
-        registration: { kinds: ["deletion"], action: "authoring" },
-      },
-    };
-  }
-  return {
-    status: "ready",
-    value: {
-      kind: "delete-accepted-range",
-      backward,
-      identityOptions: options,
-      registration: { kinds: ["deletion"], action: "authoring" },
-    },
-  };
-}
-
 /** Text insertion plan. Pure: no editor reads, no editor writes. */
 export function buildTextInsertionPlan(
   targetKind: ReviewTarget["kind"],
@@ -991,10 +900,10 @@ function resolveProposalNeighborDeletionTarget(
 /**
  * Single neighbor entry for deletion (#85 boundary, #86 rows 2-7, 10):
  * proposal neighbors win, accepted neighbors come next, else null so the
- * caller keeps the classified target. One function so classification and
- * commit cannot diverge on precedence.
+ * caller keeps the classified target. Preparation retains this result for
+ * execution rather than resolving the neighbor again.
  */
-export function resolveNeighborDeletionTarget(
+function resolveNeighborDeletionTarget(
   target: ReviewTarget,
   backward: boolean,
 ): ReviewTarget | null {
@@ -1039,89 +948,150 @@ function readProposalCaretOffset(
   };
 }
 
-/**
- * Non-mutating deletion classification behind the seam. Each arm delegates
- * to the same verify helper the matching commit branch re-runs, so the
- * read-only refusal rules live once: the classifier states them, the commit
- * revalidates them within its own update, and the cut preflight reaches them
- * through the classifier. Never mints proposal identity and never resolves:
- * resolution stays kind-owned behind TargetEditEffect.
+type DeletionContinuation = Readonly<{
+  node: ReviewDeletionNode | null;
+  proposalId: string | null;
+}>;
+
+/** Internal, single-use preparation for immediate execution in the same update.
+ * Cut may inspect readiness and discard it; never retain it across other work.
+ * Preparation neither allocates proposal identity nor mutates the editor.
  */
-export function $classifyReviewDeletion(
+export type PreparedReviewDeletion =
+  | Readonly<{
+      kind: "delete-proposal-caret";
+      target: ProposalCaretTarget;
+      deletion: ProposalCaretDeletion;
+    }>
+  | Readonly<{
+      kind: "delete-proposal-range";
+      target: ProposalRangeTarget;
+      deletion: ProposalRangeDeletion;
+    }>
+  | Readonly<{
+      kind: "delete-accepted-range";
+      target: AcceptedRangeTarget;
+      backward: boolean;
+      identityOptions: ReviewAuthoringOptions;
+      continuation: DeletionContinuation;
+    }>
+  | Readonly<{ kind: "resolve-replacement"; proposalId: string }>;
+
+/** Resolve the directional target and prepare deletion once, without mutation. */
+export function $prepareReviewDeletion(
   target: ReviewTarget,
   backward: boolean,
   granularity: "character" | "word",
   options: ReviewAuthoringOptions,
-): Preparation<ResolvingEditPlan> {
-  // #86: neighbor targets (proposal first, accepted next) win over the
-  // classified target; null keeps it.
+): Preparation<PreparedReviewDeletion> {
   const source = resolveNeighborDeletionTarget(target, backward) ?? target;
-  const plan = buildTextDeletionPlan(
-    source.kind,
-    selectedWrapperSide(source),
-    backward,
-    granularity,
-    options,
-  );
-  if (plan.status !== "ready") return plan;
-  switch (plan.value.kind) {
-    case "delete-proposal-caret": {
-      if (source.kind !== "proposal-caret") return kindMismatch();
+  switch (source.kind) {
+    case "proposal-caret": {
       const prepared = prepareProposalCaretDeletion(
         source,
         backward,
         granularity,
       );
       if (prepared.status !== "ready") return prepared;
-      return plan;
+      return {
+        status: "ready",
+        value: {
+          kind: "delete-proposal-caret",
+          target: source,
+          deletion: prepared.value,
+        },
+      };
     }
-    case "delete-proposal-range": {
-      if (source.kind !== "proposal-range") return kindMismatch();
+    case "proposal-range": {
       const prepared = prepareProposalRangeDeletion(source);
       if (prepared.status !== "ready") return prepared;
-      return plan;
+      return {
+        status: "ready",
+        value: {
+          kind: "delete-proposal-range",
+          target: source,
+          deletion: prepared.value,
+        },
+      };
     }
-    case "delete-accepted-caret": {
-      if (source.kind !== "accepted-caret") return kindMismatch();
+    case "accepted-caret": {
       const verified = verifyAcceptedCaretDeletion(
         source,
         backward,
         granularity,
       );
       if (verified.status !== "ready") return verified;
-      // The commit resolves through the kind owner here; classification
-      // stays ready so the resolution path is preserved verbatim.
-      if (verified.value.action === "reject-replacement") return plan;
-      const span = verifyDeleteAcceptedSpan(
-        verified.value.range,
-        backward,
-        plan.value.registration,
-      );
-      if (span.status !== "ready") return span;
-      return plan;
+      if (verified.value.action === "reject-replacement")
+        return {
+          status: "ready",
+          value: {
+            kind: "resolve-replacement",
+            proposalId: verified.value.proposalId,
+          },
+        };
+      return prepareAcceptedSpan(verified.value.range, backward, options);
     }
-    case "delete-accepted-range": {
-      if (source.kind !== "accepted-range") return kindMismatch();
-      const span = verifyDeleteAcceptedSpan(
-        source,
-        backward,
-        plan.value.registration,
+    case "accepted-range":
+      return prepareAcceptedSpan(source, backward, options);
+  }
+}
+
+function prepareAcceptedSpan(
+  target: AcceptedRangeTarget,
+  backward: boolean,
+  identityOptions: ReviewAuthoringOptions,
+): Preparation<PreparedReviewDeletion> {
+  const verified = verifyDeleteAcceptedSpan(target, backward, {
+    kinds: ["deletion"],
+    action: "authoring",
+  });
+  if (verified.status !== "ready") return verified;
+  return {
+    status: "ready",
+    value: {
+      kind: "delete-accepted-range",
+      target,
+      backward,
+      identityOptions,
+      continuation: verified.value,
+    },
+  };
+}
+
+/** Execute an immediately preceding preparation; resolution stays kind-owned. */
+export function $commitReviewDeletion(
+  prepared: PreparedReviewDeletion,
+): Preparation<TargetEditEffect> {
+  switch (prepared.kind) {
+    case "delete-proposal-caret":
+      return commitDeleteProposalCaret(prepared.target, prepared.deletion);
+    case "delete-proposal-range":
+      return commitDeleteProposalRange(prepared.target, prepared.deletion);
+    case "delete-accepted-range":
+      if (prepared.target.start === prepared.target.end) return noOp();
+      return commitDeleteAcceptedSpan(
+        prepared.target,
+        prepared.backward,
+        prepared.identityOptions,
+        prepared.continuation,
       );
-      if (span.status !== "ready") return span;
-      return plan;
-    }
+    case "resolve-replacement":
+      return {
+        status: "ready",
+        value: {
+          kind: "resolution-required",
+          action: "reject-replacement",
+          proposalId: prepared.proposalId,
+        },
+      };
   }
 }
 
 function commitDeleteProposalCaret(
-  target: ReviewTarget,
-  backward: boolean,
-  granularity: "character" | "word",
+  target: ProposalCaretTarget,
+  deletion: ProposalCaretDeletion,
 ): Preparation<TargetEditEffect> {
-  if (target.kind !== "proposal-caret") return kindMismatch();
-  const prepared = prepareProposalCaretDeletion(target, backward, granularity);
-  if (prepared.status !== "ready") return prepared;
-  if (prepared.value.action === "resolve-deletion") {
+  if (deletion.action === "resolve-deletion") {
     // Whole-restore lands at the end of restored text for every origin
     // (#86 row 4): touch the restored tail so the resolution's own
     // touches-caret owns the final placement, inside and outside alike.
@@ -1136,7 +1106,7 @@ function commitDeleteProposalCaret(
       },
     };
   }
-  if (prepared.value.action === "resolve-replacement") {
+  if (deletion.action === "resolve-replacement") {
     return {
       status: "ready",
       value: {
@@ -1146,11 +1116,7 @@ function commitDeleteProposalCaret(
       },
     };
   }
-  const spliced = spliceProposalRange(
-    target,
-    prepared.value.start,
-    prepared.value.end,
-  );
+  const spliced = spliceProposalRange(target, deletion.start, deletion.end);
   if (spliced.status !== "ready") return spliced;
   if (
     target.wrappers.every((wrapper) =>
@@ -1169,19 +1135,17 @@ function commitDeleteProposalCaret(
   placeProposalCaret(
     target.paragraph,
     target.wrappers,
-    prepared.value.start,
+    deletion.start,
     target.childIndex,
   );
   return mutated();
 }
 
 function commitDeleteProposalRange(
-  target: ReviewTarget,
+  target: ProposalRangeTarget,
+  deletion: ProposalRangeDeletion,
 ): Preparation<TargetEditEffect> {
-  if (target.kind !== "proposal-range") return kindMismatch();
-  const prepared = prepareProposalRangeDeletion(target);
-  if (prepared.status !== "ready") return prepared;
-  if (prepared.value.action === "resolve-deletion") {
+  if (deletion.action === "resolve-deletion") {
     return {
       status: "ready",
       value: {
@@ -1191,7 +1155,7 @@ function commitDeleteProposalRange(
       },
     };
   }
-  if (prepared.value.action === "resolve-replacement") {
+  if (deletion.action === "resolve-replacement") {
     return {
       status: "ready",
       value: {
@@ -1201,7 +1165,7 @@ function commitDeleteProposalRange(
       },
     };
   }
-  if (prepared.value.action === "unchanged") {
+  if (deletion.action === "unchanged") {
     return noOp();
   }
   const fallbackIndex = getChildIndex(target.paragraph, target.wrappers[0]!);
@@ -1217,19 +1181,14 @@ function commitDeleteProposalRange(
 }
 
 /**
- * Read-only accepted-span verification shared by the classifier and the
- * commit: registration first, then deletion continuation. One encoding of
- * the span refusal prefix; the commit re-runs it as revalidation within its
- * own update, and the cut preflight reaches it through the classifier.
+ * Read-only accepted-span preparation: registration first, then deletion
+ * continuation. Both ordinary deletion and cut preflight use these checks.
  */
 function verifyDeleteAcceptedSpan(
   target: AcceptedRangeTarget,
   backward: boolean,
   registration: ReviewEditRegistration,
-): Preparation<{
-  node: ReviewDeletionNode | null;
-  proposalId: string | null;
-}> {
+): Preparation<DeletionContinuation> {
   const missing = checkRegistration(registration);
   if (missing !== null) return missing;
   const continuation = findAcceptedDeletionContinuation(target, backward);
@@ -1242,10 +1201,8 @@ type AcceptedCaretDeletion =
   | Readonly<{ action: "reject-replacement"; proposalId: string }>;
 
 /**
- * Read-only accepted-caret verification shared by the classifier and the
- * commit: adjacent-replacement resolution first, then deletion-target math.
- * Returns the span to delete or the kind-owned resolution the commit
- * performs; this verification never resolves itself.
+ * Read-only accepted-caret preparation: adjacent-replacement resolution
+ * first, then deletion-target math. Returns the span or requested resolution.
  */
 function verifyAcceptedCaretDeletion(
   target: AcceptedCaretTarget,
@@ -1288,12 +1245,10 @@ function commitDeleteAcceptedSpan(
   target: AcceptedRangeTarget,
   backward: boolean,
   identityOptions: ReviewAuthoringOptions,
-  registration: ReviewEditRegistration,
+  continuation: DeletionContinuation,
 ): Preparation<TargetEditEffect> {
-  const verified = verifyDeleteAcceptedSpan(target, backward, registration);
-  if (verified.status !== "ready") return verified;
-  const continued = verified.value.node;
-  const continuedId = verified.value.proposalId;
+  const continued = continuation.node;
+  const continuedId = continuation.proposalId;
   const minted =
     continued === null || continuedId === null
       ? prepareProposalId(identityOptions)
@@ -1317,34 +1272,6 @@ function commitDeleteAcceptedSpan(
     target.paragraph.select(index, index);
   }
   return mutated();
-}
-
-function commitDeleteAcceptedCaret(
-  target: ReviewTarget,
-  backward: boolean,
-  granularity: "character" | "word",
-  identityOptions: ReviewAuthoringOptions,
-  registration: ReviewEditRegistration,
-): Preparation<TargetEditEffect> {
-  if (target.kind !== "accepted-caret") return kindMismatch();
-  const verified = verifyAcceptedCaretDeletion(target, backward, granularity);
-  if (verified.status !== "ready") return verified;
-  if (verified.value.action === "reject-replacement") {
-    return {
-      status: "ready",
-      value: {
-        kind: "resolution-required",
-        action: "reject-replacement",
-        proposalId: verified.value.proposalId,
-      },
-    };
-  }
-  return commitDeleteAcceptedSpan(
-    verified.value.range,
-    backward,
-    identityOptions,
-    registration,
-  );
 }
 
 /**
@@ -1628,37 +1555,9 @@ function commitCorrectProposalRangeWithRuns(
 
 function commitPlan(
   target: ReviewTarget,
-  plan: ReviewTargetEditPlan,
+  plan: NonResolvingEditPlan,
 ): Preparation<TargetEditEffect> {
-  if (
-    plan.kind === "delete-proposal-caret" ||
-    plan.kind === "delete-accepted-caret"
-  ) {
-    const resolved = resolveNeighborDeletionTarget(target, plan.backward);
-    if (resolved !== null) target = resolved;
-  }
   switch (plan.kind) {
-    case "delete-proposal-caret":
-      return commitDeleteProposalCaret(target, plan.backward, plan.granularity);
-    case "delete-proposal-range":
-      return commitDeleteProposalRange(target);
-    case "delete-accepted-caret":
-      return commitDeleteAcceptedCaret(
-        target,
-        plan.backward,
-        plan.granularity,
-        plan.identityOptions,
-        plan.registration,
-      );
-    case "delete-accepted-range":
-      if (target.kind !== "accepted-range") return kindMismatch();
-      if (target.start === target.end) return noOp();
-      return commitDeleteAcceptedSpan(
-        target,
-        plan.backward,
-        plan.identityOptions,
-        plan.registration,
-      );
     case "insert-runs-at-caret":
       return commitInsertRunsAtCaret(
         target,
@@ -1683,22 +1582,14 @@ function commitPlan(
   }
 }
 
-/**
- * Single commit seam. Overloads express paste's (and text insertion's)
- * non-resolution in the types: NonResolvingEditPlan inputs cannot yield
- * resolution-required, so those callers switch exhaustively without one.
- */
-export function $commitTargetEdit(
-  target: ReviewTarget,
-  plan: ResolvingEditPlan,
-): Preparation<TargetEditEffect>;
+/** Commit text insertion or paste; these edits cannot request resolution. */
 export function $commitTargetEdit(
   target: ReviewTarget,
   plan: NonResolvingEditPlan,
 ): Preparation<NonResolvingEditEffect>;
 export function $commitTargetEdit(
   target: ReviewTarget,
-  plan: ReviewTargetEditPlan,
+  plan: NonResolvingEditPlan,
 ): Preparation<TargetEditEffect> {
   return commitPlan(target, plan);
 }
