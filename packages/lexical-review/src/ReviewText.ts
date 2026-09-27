@@ -5,8 +5,8 @@
  *
  * This module owns intent semantics (granularity defaults, claim routing,
  * resolution execution). All target mechanics (maps, offsets, mutation,
- * caret restore) live behind the $commitTargetEdit seam in
- * ReviewTargetEdit: after classification this module coordinates nothing.
+ * caret restore) live in ReviewTargetEdit. Deletion preparation is passed
+ * directly to execution in the same update, without intervening mutation.
  */
 import { $getReviewInputFormat } from "./ReviewInputFormatting";
 import type { ReviewAuthoringOptions } from "./ReviewAuthoring";
@@ -22,7 +22,8 @@ export type {
   ReviewIntentOutcome,
 } from "./ReviewIntent";
 import {
-  $classifyReviewDeletion,
+  $prepareReviewDeletion,
+  $commitReviewDeletion,
   $commitTargetEdit,
   buildTextInsertionPlan,
   selectedWrapperSide,
@@ -63,14 +64,14 @@ export function $claimTextDeletion(
   backward: boolean,
   options: ReviewDeletionOptions,
 ): ReviewIntentOutcome {
-  const plan = $classifyReviewDeletion(
+  const prepared = $prepareReviewDeletion(
     target,
     backward,
     options.granularity ?? "character",
     options,
   );
-  if (plan.status !== "ready") return plan;
-  const result = $commitTargetEdit(target, plan.value);
+  if (prepared.status !== "ready") return prepared;
+  const result = $commitReviewDeletion(prepared.value);
   if (result.status !== "ready") return result;
   if (result.value.kind === "mutated") return changed();
   if (result.value.kind === "no-op") return unchanged();

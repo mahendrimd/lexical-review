@@ -39,7 +39,7 @@ import {
   type ReviewIntentRefusal,
 } from "./ReviewIntent";
 import { $deleteReviewText } from "./ReviewIntentDispatch";
-import { $classifyReviewDeletion } from "./ReviewTargetEdit";
+import { $prepareReviewDeletion } from "./ReviewTargetEdit";
 import {
   inspectFragmentSelection,
   inspectReviewTarget,
@@ -320,7 +320,7 @@ export function $copyReviewSelection(
 /**
  * Read-only cut preflight in `$deleteReviewText` dispatch order: fragment
  * ownership, then the classified target. Range checks delegate to the shared
- * deletion classifier so refusal precedence lives in one module. `null`
+ * deletion preparation so refusal precedence lives in one module. `null`
  * means the follow-up deletion is supported; any outcome must be reported
  * with the clipboard untouched. The follow-up `$deleteReviewText` after the
  * clipboard write revalidates from scratch: a classified target is never
@@ -341,13 +341,13 @@ function $preflightCutDeletion(): ReviewIntentOutcome | null {
   if (target.kind === "accepted-range") {
     if (target.start === target.end)
       return { status: "unchanged", value: undefined };
-    const classified = $classifyReviewDeletion(target, false, "character", {});
-    if (classified.status !== "ready") return classified;
+    const prepared = $prepareReviewDeletion(target, false, "character", {});
+    if (prepared.status !== "ready") return prepared;
     return null;
   }
   if (target.kind === "proposal-range") {
-    const classified = $classifyReviewDeletion(target, false, "character", {});
-    if (classified.status !== "ready") return classified;
+    const prepared = $prepareReviewDeletion(target, false, "character", {});
+    if (prepared.status !== "ready") return prepared;
     return null;
   }
   return refusal(

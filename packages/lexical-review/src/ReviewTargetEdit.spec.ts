@@ -33,9 +33,9 @@ import {
 } from "./index";
 import { $applyPasteRuns } from "./ReviewPaste";
 import {
-  $classifyReviewDeletion,
+  $prepareReviewDeletion,
+  $commitReviewDeletion,
   buildPastePlan,
-  buildTextDeletionPlan,
   buildTextInsertionPlan,
 } from "./ReviewTargetEdit";
 import { inspectReviewTarget } from "./ReviewTargeting";
@@ -89,51 +89,6 @@ function expectPreserved(
 }
 
 describe("target-edit builders (pure, editor-free)", () => {
-  it("refuses formatting-side deletion with the verbatim prepare code", () => {
-    for (const kind of ["proposal-caret", "proposal-range"] as const) {
-      expect(
-        buildTextDeletionPlan(kind, "formatting", true, "character", {}),
-      ).toEqual({
-        status: "refused",
-        code: "unsupported-proposal-edit",
-        message: "Text deletion cannot alter a pending formatting target.",
-      });
-    }
-  });
-
-  it("selects deletion variants per target kind", () => {
-    expect(
-      buildTextDeletionPlan("proposal-caret", "insertion", true, "word", {}),
-    ).toMatchObject({
-      status: "ready",
-      value: { kind: "delete-proposal-caret", granularity: "word" },
-    });
-    expect(
-      buildTextDeletionPlan(
-        "proposal-range",
-        "deletion",
-        true,
-        "character",
-        {},
-      ),
-    ).toMatchObject({
-      status: "ready",
-      value: { kind: "delete-proposal-range" },
-    });
-    expect(
-      buildTextDeletionPlan("accepted-caret", null, false, "character", {}),
-    ).toMatchObject({
-      status: "ready",
-      value: { kind: "delete-accepted-caret" },
-    });
-    expect(
-      buildTextDeletionPlan("accepted-range", null, false, "character", {}),
-    ).toMatchObject({
-      status: "ready",
-      value: { kind: "delete-accepted-range" },
-    });
-  });
-
   it("refuses deletion-side insertion typing with verbatim messages", () => {
     expect(
       buildTextInsertionPlan("proposal-caret", "deletion", "x", 0, {}),
@@ -215,8 +170,8 @@ describe("target-edit builders (pure, editor-free)", () => {
   });
 });
 
-describe("deletion classification without mutation", () => {
-  it("classifies a supported range to a ready plan with state preserved", () => {
+describe("deletion preparation without mutation", () => {
+  it("prepares a supported range with state and identity allocation preserved", () => {
     const editor = setup([text("AB")]);
     editor.update(
       () => {
@@ -227,20 +182,19 @@ describe("deletion classification without mutation", () => {
     const beforeDoc = snapshotState(editor);
     const beforeSelection = snapshotSelection(editor);
     let plan: unknown;
+    const proposalIdFactory = vi.fn(() => "prepared-deletion");
     editor.update(
       () => {
         const inspection = inspectReviewTarget();
         expect(inspection.status).toBe("ready");
         if (inspection.status !== "ready") return;
-        plan = $classifyReviewDeletion(
-          inspection.value,
-          false,
-          "character",
-          {},
-        );
+        plan = $prepareReviewDeletion(inspection.value, false, "character", {
+          proposalIdFactory,
+        });
       },
       { discrete: true },
     );
+    expect(proposalIdFactory).not.toHaveBeenCalled();
     expect(plan).toMatchObject({
       status: "ready",
       value: { kind: "delete-accepted-range" },
@@ -248,53 +202,111 @@ describe("deletion classification without mutation", () => {
     expectPreserved(editor, beforeDoc, beforeSelection);
   });
 
-  it("refuses a formatting proposal range with the delete route's code", () => {
-    const editor = setup(
-      [text("target")],
-      [ReviewFormattingNode, ReviewInsertionNode, ReviewDeletionNode],
-    );
-    const factory = () => "fmt";
-    editor.update(
-      () => {
-        $getRoot().getAllTextNodes()[0]!.select(0, 6);
-        expect(
-          $setReviewFormatting({ bold: true }, { proposalIdFactory: factory })
-            .status,
-        ).toBe("changed");
-        $getRoot().getAllTextNodes()[0]!.select(1, 3);
-      },
-      { discrete: true },
-    );
-    const beforeDoc = snapshotState(editor);
-    const beforeSelection = snapshotSelection(editor);
-    let classified: ReviewIntentOutcome | undefined;
-    let deleted: ReviewIntentOutcome | undefined;
-    editor.update(
-      () => {
-        const inspection = inspectReviewTarget();
-        expect(inspection.status).toBe("ready");
-        if (inspection.status !== "ready") return;
-        const plan = $classifyReviewDeletion(
-          inspection.value,
-          false,
-          "character",
-          {},
-        );
-        if (plan.status !== "ready") classified = plan;
-        deleted = $deleteReviewText(false, {});
-      },
-      { discrete: true },
-    );
-    expect(classified).toMatchObject({
-      status: "refused",
-      code: "unsupported-proposal-edit",
-    });
-    expect(deleted).toMatchObject({
-      status: "refused",
-      code: "unsupported-proposal-edit",
-    });
-    expectPreserved(editor, beforeDoc, beforeSelection);
-  });
+  it.each([true, false])(
+    "executes the prepared neighbor deletion (backward=%s)",
+    (backward) => {
+      const proposed = reviewNode("review-insertion", "p", [text("xy")]);
+      const editor = setup(
+        backward ? [proposed, text("ab")] : [text("ab"), proposed],
+      );
+      editor.update(
+        () => {
+          const accepted = $getRoot()
+            .getAllTextNodes()
+            .find((node) => node.getTextContent() === "ab")!;
+          const offset = backward ? 0 : 2;
+          accepted.select(offset, offset);
+          const inspection = inspectReviewTarget();
+          expect(inspection.status).toBe("ready");
+          if (inspection.status !== "ready") return;
+          const prepared = $prepareReviewDeletion(
+            inspection.value,
+            backward,
+            "character",
+            {},
+          );
+          expect(prepared.status).toBe("ready");
+          if (prepared.status !== "ready") return;
+          expect($getRoot().getTextContent()).toBe(backward ? "xyab" : "abxy");
+          expect($commitReviewDeletion(prepared.value)).toMatchObject({
+            status: "ready",
+            value: { kind: "mutated" },
+          });
+          expect(accepted.getTextContent()).toBe("ab");
+          expect($inspectReviewProposal("p")).toMatchObject({
+            status: "unchanged",
+            value: {
+              kind: "insertion",
+              proposal: { proposalId: "p", text: backward ? "x" : "y" },
+            },
+          });
+          const selection = $getSelection();
+          expect($isRangeSelection(selection)).toBe(true);
+          if ($isRangeSelection(selection)) {
+            expect(selection.isCollapsed()).toBe(true);
+            expect(selection.anchor.getNode().getTextContent()).toBe(
+              backward ? "x" : "y",
+            );
+            expect(selection.anchor.offset).toBe(backward ? 1 : 0);
+          }
+        },
+        { discrete: true },
+      );
+    },
+  );
+
+  it.each([true, false])(
+    "refuses formatting proposal deletion (collapsed=%s)",
+    (collapsed) => {
+      const editor = setup(
+        [text("target")],
+        [ReviewFormattingNode, ReviewInsertionNode, ReviewDeletionNode],
+      );
+      const factory = () => "fmt";
+      editor.update(
+        () => {
+          $getRoot().getAllTextNodes()[0]!.select(0, 6);
+          expect(
+            $setReviewFormatting({ bold: true }, { proposalIdFactory: factory })
+              .status,
+          ).toBe("changed");
+          $getRoot()
+            .getAllTextNodes()[0]!
+            .select(1, collapsed ? 1 : 3);
+        },
+        { discrete: true },
+      );
+      const beforeDoc = snapshotState(editor);
+      const beforeSelection = snapshotSelection(editor);
+      let classified: ReviewIntentOutcome | undefined;
+      let deleted: ReviewIntentOutcome | undefined;
+      editor.update(
+        () => {
+          const inspection = inspectReviewTarget();
+          expect(inspection.status).toBe("ready");
+          if (inspection.status !== "ready") return;
+          const plan = $prepareReviewDeletion(
+            inspection.value,
+            false,
+            "character",
+            {},
+          );
+          if (plan.status !== "ready") classified = plan;
+          deleted = $deleteReviewText(false, {});
+        },
+        { discrete: true },
+      );
+      expect(classified).toMatchObject({
+        status: "refused",
+        code: "unsupported-proposal-edit",
+      });
+      expect(deleted).toMatchObject({
+        status: "refused",
+        code: "unsupported-proposal-edit",
+      });
+      expectPreserved(editor, beforeDoc, beforeSelection);
+    },
+  );
 });
 
 describe("refusal preservation through the intent seams", () => {
