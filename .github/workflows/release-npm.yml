@@ -1,14 +1,77 @@
 name: Release package to NPM registry
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/release-npm.yml"
+      - "package.json"
+      - "packages/lexical-review/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "scripts/release/**"
+      - "tsconfig.json"
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional prospective tag (for example v3.0.0) to validate against the package version"
+        required: false
+        type: string
   release:
     types: ["published"]
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  verify:
+    name: Verify release artifact
+    if: github.event_name != 'release'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          cache: true
+          install: false
+
+      - name: Verify release artifact
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          fi
+          if [ -n "$TAG" ]; then
+            pnpm release:dry-run -- --tag "$TAG" --pack-dir release-artifact
+          else
+            pnpm release:dry-run -- --pack-dir release-artifact
+          fi
+
+      - name: Upload verified tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-tarball
+          path: |
+            release-artifact/*.tgz
+            release-artifact/release-jobs.json
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish verified release artifact
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
       id-token: write
     steps:
       - name: Checkout
@@ -21,13 +84,72 @@ jobs:
           cache: true
           install: false
 
-      - name: Install dependencies Frozen
-        run: pnpm --filter lexical-review install --frozen-lockfile
+      - name: Download verified tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id="$(gh run list --commit "$GITHUB_SHA" --workflow release-npm.yml --status success --limit 10 --json databaseId,conclusion --jq '[.[] | select(.conclusion == "success")] | .[0].databaseId // empty')"
+          if [ -z "$run_id" ]; then
+            echo "release:artifact: no successful release-npm verify run on $GITHUB_SHA."
+            exit 1
+          fi
+          gh run download "$run_id" --name release-tarball --dir release-artifact
+          echo "release:artifact: downloaded verified tarball from run $run_id."
 
-      - name: Build Lexical-Review
-        run: pnpm --filter lexical-review build
+      - name: Require full compatibility evidence on the release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          check_full_run() {
+            local workflow="$1"
+            shift
+            local run_id
+            run_id="$(gh run list --commit "$GITHUB_SHA" --workflow "$workflow" --status success --limit 10 --json databaseId,conclusion --jq '[.[] | select(.conclusion == "success")] | .[0].databaseId // empty')"
+            if [ -z "$run_id" ]; then
+              echo "release:gate: no successful $workflow run on $GITHUB_SHA."
+              exit 1
+            fi
+            local jobs
+            jobs="$(gh api "repos/${{ github.repository }}/actions/runs/$run_id/jobs?per_page=100" --paginate --jq '.jobs')"
+            local missing=0
+            for expected in "$@"; do
+              local conclusion
+              conclusion="$(echo "$jobs" | jq -r --arg name "$expected" '[.[] | select(.name == $name)] | .[0].conclusion // "missing"')"
+              if [ "$conclusion" != "success" ]; then
+                echo "release:gate: job '$expected' in $workflow run $run_id is $conclusion, not success."
+                missing=1
+              fi
+            done
+            if [ "$missing" -ne 0 ]; then
+              echo "release:gate: $workflow run $run_id is not the complete configured matrix."
+              exit 1
+            fi
+            echo "release:gate: $workflow run $run_id covers the complete matrix."
+          }
+
+          # Expected jobs come from the verified artifact's manifest, so this
+          # step needs only jq: no dependency install is required to gate.
+          for workflow in lexical-compatibility.yml package-contract.yml; do
+            mapfile -t expected_jobs < <(
+              jq -r --arg workflow "$workflow" '.[$workflow][]' release-artifact/release-jobs.json
+            )
+            check_full_run "$workflow" "${expected_jobs[@]}"
+          done
+
+      - name: Validate release tag against verified artifact
+        run: |
+          mkdir -p tag-check
+          tar -xzf release-artifact/lexical-review-*.tgz -C tag-check
+          pkg_version="$(jq -r .version tag-check/package/package.json)"
+          tag_version="${{ github.event.release.tag_name }}"
+          tag_version="${tag_version#v}"
+          if [ "$pkg_version" != "$tag_version" ]; then
+            echo "release:tag: release tag ${{ github.event.release.tag_name }} disagrees with verified artifact version $pkg_version."
+            exit 1
+          fi
+          echo "release:tag: release tag agrees with verified artifact version $pkg_version."
 
       - name: Publish to NPM registry
         env:
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org
-        run: pnpm publish packages/lexical-review --access public --no-git-checks --provenance
+        run: pnpm publish release-artifact/lexical-review-*.tgz --access public --no-git-checks --provenance

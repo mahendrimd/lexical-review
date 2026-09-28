@@ -53,6 +53,7 @@ pnpm build:demo                  # build the demo
 pnpm --filter lexical-review build
 pnpm lint
 pnpm compatibility               # run configured Lexical compatibility checks
+pnpm release:dry-run             # verify the packed release artifact without publishing
 ```
 
 Contributions and issue reports are welcome. Please include a focused reproduction or test when changing review behavior.
