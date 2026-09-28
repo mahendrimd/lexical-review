@@ -19,6 +19,7 @@
     "compatibility:matrix": "node scripts/compatibility/runner.mjs matrix",
     "compatibility:validate": "node scripts/compatibility/runner.mjs validate",
     "compatibility:verify": "node scripts/compatibility/runner.mjs verify",
+    "release:dry-run": "node scripts/release/verify.mjs verify",
     "prettier:check": "pnpm exec prettier . --check",
     "preview:demo": "pnpm nx preview demo",
     "lint": "eslint .",
