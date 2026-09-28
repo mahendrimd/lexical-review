@@ -4,15 +4,6 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
-    exclude: [
-      "**/node_modules/**",
-      "dist",
-      ".nx",
-      ".idea",
-      ".git",
-      ".cache",
-      "**/dist/**",
-      "**/e2e/**",
-    ],
+    exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
   },
 });
