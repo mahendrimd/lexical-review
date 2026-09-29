@@ -25,6 +25,36 @@ function invalid(message: string, path = "$"): ValidationResult<never> {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Lexical 0.51 writes schema-conditional ElementNode fields (textFormat,
+// textStyle) whenever they hold defaults, omits them from some builds, and
+// writes them as explicit undefined from others; earlier versions never write
+// them. All three spellings describe the same document, so the
+// parse-preservation guard compares canonical forms with absent, undefined,
+// and default spellings stripped from both sides.
+function stripLexicalDefaults(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stripLexicalDefaults);
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+  const canonical: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (
+      (key === "textFormat" && (entry === undefined || entry === 0)) ||
+      (key === "textStyle" && (entry === undefined || entry === ""))
+    ) {
+      continue;
+    }
+    canonical[key] = stripLexicalDefaults(entry);
+  }
+  return canonical;
+}
+
 function sameSerializedValue(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
     return true;
@@ -141,7 +171,12 @@ export function importReviewDocument(
         "$",
       );
     }
-    if (!sameSerializedValue(validated.value, reparsed.value)) {
+    if (
+      !sameSerializedValue(
+        stripLexicalDefaults(validated.value),
+        stripLexicalDefaults(reparsed.value),
+      )
+    ) {
       return invalid(
         "Lexical changed the validated review document while parsing.",
         "$",
