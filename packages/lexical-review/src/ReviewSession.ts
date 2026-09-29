@@ -30,29 +30,64 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // Lexical 0.51 writes schema-conditional ElementNode fields (textFormat,
-// textStyle) whenever they hold defaults, omits them from some builds, and
-// writes them as explicit undefined from others; earlier versions never write
-// them. All three spellings describe the same document, so the
-// parse-preservation guard compares canonical forms with absent, undefined,
-// and default spellings stripped from both sides.
-function stripLexicalDefaults(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(stripLexicalDefaults);
-  }
-  if (!isRecord(value)) {
-    return value;
-  }
-  const canonical: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
+// textStyle) as present-but-possibly-undefined on root and review wrapper
+// nodes, where earlier versions omit them; after a JSON round trip the
+// undefined spellings read back as absent. The guard accepts absent,
+// explicit undefined, and explicit defaults as equivalent inputs at those
+// two sites, and compares everything else under the existing comparator
+// (which ignores Lexical `key` properties). Normalization follows the
+// document structure — never a bare `type` property — because opaque
+// extension payloads may contain node-like objects that must stay untouched.
+const REVIEW_WRAPPER_TYPES: ReadonlySet<string> = new Set([
+  "review-deletion",
+  "review-fragment",
+  "review-formatting",
+  "review-insertion",
+]);
+
+function normalizeLexicalNode(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(node)) {
     if (
       (key === "textFormat" && (entry === undefined || entry === 0)) ||
       (key === "textStyle" && (entry === undefined || entry === ""))
     ) {
       continue;
     }
-    canonical[key] = stripLexicalDefaults(entry);
+    normalized[key] = entry;
   }
-  return canonical;
+  return normalized;
+}
+
+function normalizeForPreservationGuard(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.root)) {
+    return value;
+  }
+  const root = value.root;
+  const normalizedRoot = normalizeLexicalNode(root);
+  if (Array.isArray(root.children)) {
+    normalizedRoot.children = root.children.map((paragraph) => {
+      if (!isRecord(paragraph) || !Array.isArray(paragraph.children)) {
+        return paragraph;
+      }
+      return {
+        ...paragraph,
+        children: (paragraph.children as unknown[]).map((child) => {
+          if (
+            !isRecord(child) ||
+            typeof child.type !== "string" ||
+            !REVIEW_WRAPPER_TYPES.has(child.type)
+          ) {
+            return child;
+          }
+          return normalizeLexicalNode(child);
+        }),
+      };
+    });
+  }
+  return { ...value, root: normalizedRoot };
 }
 
 function sameSerializedValue(left: unknown, right: unknown): boolean {
@@ -173,8 +208,8 @@ export function importReviewDocument(
     }
     if (
       !sameSerializedValue(
-        stripLexicalDefaults(validated.value),
-        stripLexicalDefaults(reparsed.value),
+        normalizeForPreservationGuard(validated.value),
+        normalizeForPreservationGuard(reparsed.value),
       )
     ) {
       return invalid(
