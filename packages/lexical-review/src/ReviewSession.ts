@@ -34,8 +34,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // nodes, where earlier versions omit them; after a JSON round trip the
 // undefined spellings read back as absent. The guard accepts absent,
 // explicit undefined, and explicit defaults as equivalent inputs at those
-// two sites, and compares everything else under the existing comparator
-// (which ignores Lexical `key` properties). Normalization follows the
+// two sites, and compares everything else exactly: node keys are runtime
+// identity, never serialized, so no `key` exception is needed and opaque
+// extension payloads compare structurally, including every property named
+// `key`. Normalization follows the
 // document structure — never a bare `type` property — because opaque
 // extension payloads may contain node-like objects that must stay untouched.
 const REVIEW_WRAPPER_TYPES: ReadonlySet<string> = new Set([
@@ -112,12 +114,8 @@ function sameSerializedValue(left: unknown, right: unknown): boolean {
   }
   const leftRecord = left as Record<string, unknown>;
   const rightRecord = right as Record<string, unknown>;
-  const leftKeys = Object.keys(leftRecord)
-    .filter((key) => key !== "key")
-    .sort();
-  const rightKeys = Object.keys(rightRecord)
-    .filter((key) => key !== "key")
-    .sort();
+  const leftKeys = Object.keys(leftRecord).sort();
+  const rightKeys = Object.keys(rightRecord).sort();
   return (
     leftKeys.length === rightKeys.length &&
     leftKeys.every(

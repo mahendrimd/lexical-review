@@ -46,6 +46,29 @@ function envelopeWithValue(value: unknown) {
   return { required: false, uri: EXTENSION_URI, value };
 }
 
+function lossyEditor(reparsed: unknown): LexicalEditor {
+  return {
+    hasNode: () => true,
+    parseEditorState: () => ({ toJSON: () => reparsed }),
+  } as unknown as LexicalEditor;
+}
+
+function docWithNodeExtension(value: unknown): unknown {
+  const wrapper = {
+    ...reviewNode("review-insertion", "a", [text("x")]),
+    extensions: [envelopeWithValue(value)],
+  };
+  return docWithWrapper(wrapper);
+}
+
+function docWithDocExtension(value: unknown): unknown {
+  const doc = reviewDocument([paragraph([text("Alpha")])]) as unknown as {
+    root: { $: { "lexical-review": { extensions: unknown[] } } };
+  };
+  doc.root.$["lexical-review"].extensions = [envelopeWithValue(value)];
+  return doc as unknown;
+}
+
 describe("Lexical 0.51 ElementNode field spellings (#98)", () => {
   it("documents the measurement lens: undefined keys survive Object.keys but not JSON", () => {
     const doc = rootWith(reviewDocument([paragraph([text("Alpha")])]), {
@@ -187,21 +210,6 @@ describe("Lexical 0.51 ElementNode field spellings (#98)", () => {
 });
 
 describe("parse-preservation guard keeps opaque extension payloads exact", () => {
-  function lossyEditor(reparsed: unknown): LexicalEditor {
-    return {
-      hasNode: () => true,
-      parseEditorState: () => ({ toJSON: () => reparsed }),
-    } as unknown as LexicalEditor;
-  }
-
-  function docWithNodeExtension(value: unknown): unknown {
-    const wrapper = {
-      ...reviewNode("review-insertion", "a", [text("x")]),
-      extensions: [envelopeWithValue(value)],
-    };
-    return docWithWrapper(wrapper);
-  }
-
   it.each([
     [
       "default textFormat",
@@ -234,5 +242,93 @@ describe("parse-preservation guard keeps opaque extension payloads exact", () =>
     const input = docWithNodeExtension({ textFormat: 0, marker: "kept" });
     const result = importReviewDocument(lossyEditor(input), input);
     expect(result.status).toBe("valid");
+  });
+});
+
+describe("parse-preservation guard keeps key properties exact", () => {
+  it("live exports carry no key properties on review nodes", () => {
+    const editor = createInsertionEditor();
+    const opened = openReviewSession(
+      editor,
+      docWithWrapper(reviewNode("review-insertion", "a", [text("x")])),
+    );
+    expect(opened.status).toBe("valid");
+    if (opened.status !== "valid") {
+      return;
+    }
+    const exported = opened.value.exportDocument();
+    expect(exported.status).toBe("valid");
+    if (exported.status !== "valid") {
+      return;
+    }
+    const hits: string[] = [];
+    const visit = (value: unknown, path: string): void => {
+      if (Array.isArray(value)) {
+        value.forEach((entry, index) => visit(entry, `${path}[${index}]`));
+        return;
+      }
+      if (typeof value !== "object" || value === null) {
+        return;
+      }
+      for (const [property, entry] of Object.entries(value)) {
+        if (property === "key") {
+          hits.push(path);
+        }
+        visit(entry, `${path}.${property}`);
+      }
+    };
+    visit(exported.value, "$");
+    expect(hits).toEqual([]);
+  });
+
+  it.each([
+    [
+      "proposal-level removal",
+      () => docWithNodeExtension({ marker: "kept", key: "k1" }),
+      () => docWithNodeExtension({ marker: "kept" }),
+    ],
+    [
+      "proposal-level modification",
+      () => docWithNodeExtension({ key: "k1" }),
+      () => docWithNodeExtension({ key: "k2" }),
+    ],
+    [
+      "document-level removal",
+      () => docWithDocExtension({ marker: "kept", key: "k1" }),
+      () => docWithDocExtension({ marker: "kept" }),
+    ],
+    [
+      "document-level modification",
+      () => docWithDocExtension({ key: "k1" }),
+      () => docWithDocExtension({ key: "k2" }),
+    ],
+    [
+      "nested removal",
+      () => docWithNodeExtension({ nested: { key: "k1", other: 1 } }),
+      () => docWithNodeExtension({ nested: { other: 1 } }),
+    ],
+    [
+      "node-like payload",
+      () => docWithNodeExtension({ type: "review-insertion", key: "k1" }),
+      () => docWithNodeExtension({ type: "review-insertion" }),
+    ],
+  ])("rejects %s inside extension values", (_name, before, after) => {
+    const input = before();
+    expect(validateReviewDocument(input).status).toBe("valid");
+    const reparsed = after();
+    expect(validateReviewDocument(reparsed).status).toBe("valid");
+    expect(importReviewDocument(lossyEditor(reparsed), input)).toMatchObject({
+      status: "invalid",
+    });
+  });
+
+  it.each([
+    ["proposal-level", () => docWithNodeExtension({ key: "k1", marker: 1 })],
+    ["document-level", () => docWithDocExtension({ key: "k1" })],
+  ])("still accepts identical key-bearing %s payloads", (_name, build) => {
+    const input = build();
+    expect(importReviewDocument(lossyEditor(input), input).status).toBe(
+      "valid",
+    );
   });
 });
