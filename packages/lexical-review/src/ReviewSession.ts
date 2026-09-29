@@ -25,6 +25,73 @@ function invalid(message: string, path = "$"): ValidationResult<never> {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Lexical 0.51 writes schema-conditional ElementNode fields (textFormat,
+// textStyle) as present-but-possibly-undefined on root and review wrapper
+// nodes, where earlier versions omit them; after a JSON round trip the
+// undefined spellings read back as absent. The guard accepts absent,
+// explicit undefined, and explicit defaults as equivalent inputs at those
+// two sites, and compares everything else exactly: node keys are runtime
+// identity, never serialized, so no `key` exception is needed and opaque
+// extension payloads compare structurally, including every property named
+// `key`. Normalization follows the
+// document structure — never a bare `type` property — because opaque
+// extension payloads may contain node-like objects that must stay untouched.
+const REVIEW_WRAPPER_TYPES: ReadonlySet<string> = new Set([
+  "review-deletion",
+  "review-fragment",
+  "review-formatting",
+  "review-insertion",
+]);
+
+function normalizeLexicalNode(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(node)) {
+    if (
+      (key === "textFormat" && (entry === undefined || entry === 0)) ||
+      (key === "textStyle" && (entry === undefined || entry === ""))
+    ) {
+      continue;
+    }
+    normalized[key] = entry;
+  }
+  return normalized;
+}
+
+function normalizeForPreservationGuard(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.root)) {
+    return value;
+  }
+  const root = value.root;
+  const normalizedRoot = normalizeLexicalNode(root);
+  if (Array.isArray(root.children)) {
+    normalizedRoot.children = root.children.map((paragraph) => {
+      if (!isRecord(paragraph) || !Array.isArray(paragraph.children)) {
+        return paragraph;
+      }
+      return {
+        ...paragraph,
+        children: (paragraph.children as unknown[]).map((child) => {
+          if (
+            !isRecord(child) ||
+            typeof child.type !== "string" ||
+            !REVIEW_WRAPPER_TYPES.has(child.type)
+          ) {
+            return child;
+          }
+          return normalizeLexicalNode(child);
+        }),
+      };
+    });
+  }
+  return { ...value, root: normalizedRoot };
+}
+
 function sameSerializedValue(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
     return true;
@@ -47,12 +114,8 @@ function sameSerializedValue(left: unknown, right: unknown): boolean {
   }
   const leftRecord = left as Record<string, unknown>;
   const rightRecord = right as Record<string, unknown>;
-  const leftKeys = Object.keys(leftRecord)
-    .filter((key) => key !== "key")
-    .sort();
-  const rightKeys = Object.keys(rightRecord)
-    .filter((key) => key !== "key")
-    .sort();
+  const leftKeys = Object.keys(leftRecord).sort();
+  const rightKeys = Object.keys(rightRecord).sort();
   return (
     leftKeys.length === rightKeys.length &&
     leftKeys.every(
@@ -141,7 +204,12 @@ export function importReviewDocument(
         "$",
       );
     }
-    if (!sameSerializedValue(validated.value, reparsed.value)) {
+    if (
+      !sameSerializedValue(
+        normalizeForPreservationGuard(validated.value),
+        normalizeForPreservationGuard(reparsed.value),
+      )
+    ) {
       return invalid(
         "Lexical changed the validated review document while parsing.",
         "$",

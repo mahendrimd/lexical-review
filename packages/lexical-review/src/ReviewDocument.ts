@@ -53,12 +53,19 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function hasExactlyKeys(value: JsonRecord, expected: readonly string[]) {
+function hasExactlyKeys(
+  value: JsonRecord,
+  expected: readonly string[],
+  optional: readonly string[] = [],
+) {
   const actual = Object.keys(value).sort();
-  const sortedExpected = [...expected].sort();
+  const required = [...expected].sort();
+  const allowed = [...expected, ...optional].sort();
   return (
-    actual.length === sortedExpected.length &&
-    actual.every((key, index) => key === sortedExpected[index])
+    actual.length >= required.length &&
+    actual.length <= allowed.length &&
+    required.every((key) => actual.includes(key)) &&
+    actual.every((key) => allowed.includes(key))
   );
 }
 
@@ -253,18 +260,22 @@ function validateReviewNode(
     );
   }
   if (
-    !hasExactlyKeys(value, [
-      ...(kind === "formatting" ? ["accepted"] : []),
-      ...(kind === "fragment" ? ["startsParagraph", "emptyFormat"] : []),
-      "children",
-      "direction",
-      "extensions",
-      "format",
-      "indent",
-      "proposalId",
-      "type",
-      "version",
-    ])
+    !hasExactlyKeys(
+      value,
+      [
+        ...(kind === "formatting" ? ["accepted"] : []),
+        ...(kind === "fragment" ? ["startsParagraph", "emptyFormat"] : []),
+        "children",
+        "direction",
+        "extensions",
+        "format",
+        "indent",
+        "proposalId",
+        "type",
+        "version",
+      ],
+      ["textFormat", "textStyle"],
+    )
   ) {
     return invalid(
       path,
@@ -279,6 +290,15 @@ function validateReviewNode(
     return invalid(`${path}.version`, "Expected a version 1 review node.");
   }
   if (value.direction !== null || value.format !== "" || value.indent !== 0) {
+    return unsupported(
+      path,
+      "Review wrapper direction, formatting, indentation, and styles are unsupported.",
+    );
+  }
+  if (
+    (value.textFormat !== undefined && value.textFormat !== 0) ||
+    (value.textStyle !== undefined && value.textStyle !== "")
+  ) {
     return unsupported(
       path,
       "Review wrapper direction, formatting, indentation, and styles are unsupported.",
@@ -521,15 +541,11 @@ export function validateReviewDocument(
     return invalid("$.root", "Expected a serialized Lexical root node.");
   }
   if (
-    !hasExactlyKeys(root, [
-      "$",
-      "children",
-      "direction",
-      "format",
-      "indent",
-      "type",
-      "version",
-    ])
+    !hasExactlyKeys(
+      root,
+      ["$", "children", "direction", "format", "indent", "type", "version"],
+      ["textFormat", "textStyle"],
+    )
   ) {
     return invalid(
       "$.root",
@@ -539,7 +555,13 @@ export function validateReviewDocument(
   if (root.type !== "root" || root.version !== 1) {
     return invalid("$.root", "Expected a version 1 Lexical root node.");
   }
-  if (root.direction !== null || root.format !== "" || root.indent !== 0) {
+  if (
+    root.direction !== null ||
+    root.format !== "" ||
+    root.indent !== 0 ||
+    (root.textFormat !== undefined && root.textFormat !== 0) ||
+    (root.textStyle !== undefined && root.textStyle !== "")
+  ) {
     return unsupported(
       "$.root",
       "Root direction, formatting, and indentation are unsupported.",
