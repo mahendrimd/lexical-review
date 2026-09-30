@@ -19,8 +19,8 @@ const packageContractDirectory = path.dirname(fileURLToPath(import.meta.url));
 const packageDirectory = path.resolve(packageContractDirectory, "..");
 const repositoryDirectory = path.resolve(packageDirectory, "../..");
 const fixtureDirectory = path.join(packageContractDirectory, "fixtures");
-const typeFixtures = ["root.ts", "cjs-root.cts"];
-const runtimeFixtures = ["runtime-root.mjs", "runtime-root.cjs"];
+const typeFixtures = ["types.mts", "types.cts"];
+const runtimeFixtures = ["runtime.mjs", "runtime.cjs"];
 
 async function linkDependencies(consumerDirectory) {
   const nodeModulesDirectory = path.join(consumerDirectory, "node_modules");

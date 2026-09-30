@@ -1,11 +1,11 @@
 const assert = require("node:assert/strict");
 const { createEditor } = require("lexical");
 
-const root = require("lexical-review");
+const review = require("lexical-review");
 
-assert.equal(typeof root.ReviewInsertionNode, "function");
-assert.equal(typeof root.ReviewDeletionNode, "function");
-assert.equal(typeof root.openReviewSession, "function");
+assert.equal(typeof review.ReviewInsertionNode, "function");
+assert.equal(typeof review.ReviewDeletionNode, "function");
+assert.equal(typeof review.openReviewSession, "function");
 for (const name of [
   "$deleteReviewText",
   "$insertReviewText",
@@ -14,15 +14,15 @@ for (const name of [
   "$resolveReviewProposal",
   "$resolveReviewProposals",
 ]) {
-  assert.equal(typeof root[name], "function");
+  assert.equal(typeof review[name], "function");
 }
-assert.equal(typeof root.validateReviewDocument, "function");
+assert.equal(typeof review.validateReviewDocument, "function");
 
 const editor = createEditor({
-  nodes: [root.ReviewInsertionNode, root.ReviewDeletionNode],
+  nodes: [review.ReviewInsertionNode, review.ReviewDeletionNode],
   onError: (error) => void error,
 });
-const opened = root.openReviewSession(editor, {
+const opened = review.openReviewSession(editor, {
   root: {
     children: [
       {
@@ -47,24 +47,24 @@ const opened = root.openReviewSession(editor, {
 assert.equal(opened.status, "valid");
 assert.equal(opened.value.exportDocument().status, "valid");
 
-assert.equal(root.ReviewExtension.name, "lexical-review/Review");
-assert.equal(typeof root.registerReviewSession, "function");
-assert.equal(typeof root.INSERT_REVIEW_FRAGMENT_COMMAND, "object");
-assert.equal(typeof root.RESOLVE_REVIEW_PROPOSALS_COMMAND, "object");
+assert.equal(review.ReviewExtension.name, "lexical-review/Review");
+assert.equal(typeof review.registerReviewSession, "function");
+assert.equal(typeof review.INSERT_REVIEW_FRAGMENT_COMMAND, "object");
+assert.equal(typeof review.RESOLVE_REVIEW_PROPOSALS_COMMAND, "object");
 assert.equal(typeof globalThis.document, "undefined");
 assert.equal(typeof globalThis.window, "undefined");
 const {
   buildEditorFromExtensions,
   getExtensionDependencyFromEditor,
 } = require("@lexical/extension");
-const extensionEditor = buildEditorFromExtensions(root.ReviewExtension);
+const extensionEditor = buildEditorFromExtensions(review.ReviewExtension);
 try {
-  const review = getExtensionDependencyFromEditor(
+  const output = getExtensionDependencyFromEditor(
     extensionEditor,
-    root.ReviewExtension,
+    review.ReviewExtension,
   ).output;
-  assert.equal(review.session.value, null);
-  assert.equal(review.openDocument({ root: {} }).status, "invalid");
+  assert.equal(output.session.value, null);
+  assert.equal(output.openDocument({ root: {} }).status, "invalid");
 } finally {
   extensionEditor.dispose();
 }
