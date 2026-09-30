@@ -20,7 +20,7 @@ For Lexical source inspection, API questions, implementation, debugging, upgrade
 
 ## Architecture and tests
 
-- Expose the framework-independent API through the package root. Keep imports safe without React or DOM globals; host components own React client boundaries.
+- Keep the package API framework-independent and safe to import without DOM globals.
 
 ## Commits and pull requests
 

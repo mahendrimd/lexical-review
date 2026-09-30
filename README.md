@@ -6,7 +6,6 @@
 
 ## Features
 
-- Framework-independent Lexical extension with editor-scoped sessions and input cleanup.
 - Node-backed v3 review session with stable proposal identity on creation.
 - Pending insertion, deletion, replacement, formatting, paragraph split/merge, and atomic document-fragment proposals.
 - Explicit accept, reject, and removal operations with no terminal history.

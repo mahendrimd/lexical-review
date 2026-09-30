@@ -70,8 +70,8 @@ flowchart LR
     State -->|saving produces successor| Doc
     Doc -->|opening starts session| State
     State -->|renders visible view| Proj
-    State -.->|detached read-only| Acc
-    State -.->|detached read-only| All
+    State -.->|read-only preview| Acc
+    State -.->|read-only preview| All
 ```
 
 ### Selection and interaction targets
@@ -93,17 +93,17 @@ browser commands to the same semantic operations available to direct callers.
 
 ## Responsibility ownership
 
-| Stage       | Module                             | Owns                                                                                                                                                                                                                                               |
-| ----------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Entry       | Client registration                | Routes browser commands to semantic operations, coordinates composition, and reports outcomes. Decides whether to claim each command.                                                                                                              |
-| Routing     | Intent dispatch                    | Chooses which kind owner sees the input, with explicit precedence when several handlers could apply. The first outcome wins, including a refusal.                                                                                                  |
-| Routing     | Targeting                          | Identifies and validates the content addressed by the selection and deletion direction. Produces the interaction target. Never mutates.                                                                                                            |
-| Decision    | Kind owners                        | Decide what an input means: create, correct, request resolution, leave unchanged, or refuse. Own review semantics. Delegate ordinary text mutation to target edits; own their specialized structural, fragment, and formatting mechanics directly. |
-| Application | Target edits                       | Applies ordinary text insertion, paste, and deletion only: offset math, tree mutation, caret placement. Read-only prepare, then consuming execute. Never decides meaning and never resolves; returns resolution requests to the kind owner.        |
-| State       | Authoring session                  | Opens a validated review document in an editor and provides access to live review state and saved snapshots.                                                                                                                                       |
-| State       | Review document                    | Defines and validates the native serialized representation of accepted content and pending proposals.                                                                                                                                              |
-| Decision    | Proposal inspection and resolution | Inspects a proposal by ID and accepts, rejects, or removes current proposals. Validates batch resolution before mutation and preserves unrelated pending work.                                                                                     |
-| Exit        | Interchange adapter                | Assesses mappings between native review documents and WER interchange documents, reporting unsupported mappings without changing live review state.                                                                                                |
+| Stage       | Module                             | Owns                                                                                                                                                                                                                                                    |
+| ----------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Entry       | Client registration                | Routes browser commands to semantic operations, coordinates composition, and reports outcomes. Decides whether to claim each command.                                                                                                                   |
+| Routing     | Intent dispatch                    | Chooses which kind owner sees the input, with explicit precedence when several handlers could apply. The first outcome wins, including a refusal.                                                                                                       |
+| Routing     | Targeting                          | Identifies and validates the content addressed by the selection and deletion direction. Produces the interaction target. Never mutates.                                                                                                                 |
+| Decision    | Kind owners                        | Decide what an input means: create, correct, request resolution, leave unchanged, or refuse. Own review semantics. Delegate ordinary text mutation to target edits; own their specialized structural, fragment, and formatting mechanics directly.      |
+| Application | Target edits                       | Applies ordinary text insertion, paste, and deletion only: offset math, tree mutation, caret placement. Consumes insertion/paste plans and prepared deletions. Never decides meaning and never resolves; returns resolution requests to the kind owner. |
+| State       | Authoring session                  | Opens a validated review document in an editor and provides access to live review state and saved snapshots.                                                                                                                                            |
+| State       | Review document                    | Defines and validates the native serialized representation of accepted content and pending proposals.                                                                                                                                                   |
+| Decision    | Proposal inspection and resolution | Inspects a proposal by ID and accepts, rejects, or removes current proposals. Validates batch resolution before mutation and preserves unrelated pending work.                                                                                          |
+| Exit        | Interchange adapter                | Assesses mappings between native review documents and WER interchange documents, reporting unsupported mappings without changing live review state.                                                                                                     |
 
 For ordinary text, kind owners decide and target edits carries out the change.
 For example, typing inside a pending insertion is decided by its kind owner as
@@ -119,29 +119,14 @@ is not yet implemented.
 
 ### Package and host boundaries
 
-The package exposes one framework-independent entrypoint, `lexical-review`,
-for nodes, document and session APIs, review operations, `ReviewExtension`, and
-direct input registration. It has no runtime React imports or `"use client"`
-directive. Importing the package is safe without DOM globals; operations that
-render DOM or consume browser events still need the corresponding environment.
-React hosts establish their client boundary in their own editor components.
+`ReviewExtension` coordinates review-session setup and input registration with
+Lexical's editor lifecycle. It opens the configured review document after
+Lexical's initial-state extension runs, so initialization cannot overwrite it.
+It replaces input registration when the session or routing options change and
+cleans it up when the session closes or the editor is disposed.
 
-`ReviewExtension` bundles every review node with input registration and cleanup.
-It opens a configured review document after Lexical's initial-state extension
-runs, so initialization cannot overwrite the document. Its output provides the
-current session, document opening and session closing, and runtime registration
-options. Invalid document input preserves the active session; closing detaches
-input routing without changing the current editor state.
-
-`registerReviewSession` remains available for hosts that create and configure an
-editor directly. React hosts use Lexical's `LexicalExtensionComposer` and retrieve
-the same extension output as other frameworks. React dependencies belong to the
-demo, whose browser tests exercise host integration. Use one registration owner
-for each active session. See the [package guide](packages/lexical-review/README.md#core-loop)
-for lifecycle and installation requirements.
-
-Hosts own their application layout and review UI. The demo demonstrates
-capabilities rather than defining a required host workflow.
+Hosts using `registerReviewSession` directly own registration and cleanup.
+Hosts own their application layout and review UI.
 
 ## Interaction lifecycle
 
@@ -172,8 +157,8 @@ flowchart TD
 
 This flow describes responsibilities rather than a fixed sequence of helper
 calls. A handler can inspect the target before deciding whether it applies.
-Returning `null` lets dispatch try another handler; returning an outcome ends
-dispatch. A refusal never permits a fallback edit. Execution can also refuse
+A handler that declines the input lets dispatch try another handler. Returning
+an outcome ends dispatch. A refusal never permits a fallback edit. Execution can also refuse
 during its checks, but every refusal must occur before mutation.
 
 Explicit accept, reject, and remove actions address proposals by ID, without
@@ -197,16 +182,18 @@ a ready helper result is not itself the final outcome.
 | `failed`          | A route reported an unexpected failure; the no-mutation refusal guarantee does not apply.                     |
 
 Command claiming is separate from success. Client registration reports outcomes
-through `onOutcome`, so a handled command may still have been refused. Direct
-mutation operations run inside `editor.update()`; the returned outcome describes
+to the host, so a handled command may still have been refused. Direct
+mutation operations run inside a Lexical update; the returned outcome describes
 the attempted operation, not a notification that the surrounding update has
 committed.
 
 Refusal always precedes mutation; failure is the unexpected path. Unexpected
-mutation errors escape the update callback into Lexical's error handling and
-rollback. Composition restores its captured state when it can and reports
-`failed` when normalization throws. A reported failure carries no preservation
-guarantee.
+mutation errors escape the update callback into Lexical's error handling.
+Composition restores its captured state when it can and reports `failed` when
+normalization throws. A reported failure carries no preservation guarantee.
+
+The all-accepted preview of live editor state throws when it cannot produce a
+preview, such as when the editor state is invalid or text composition is active.
 
 ### Preparing browser input
 
@@ -250,34 +237,29 @@ insertion, paste, and deletion. It calculates text offsets, changes the tree,
 and places the caret. Structural, fragment, and formatting edits keep their own
 mechanics.
 
+Insertion and paste use plans built from the classified target and input.
+The plan builders do not read or change editor state. Target edits checks the
+target and applies the plan. For deletion, target edits first prepares the target
+by reading the current editor state, without changing it or creating a proposal ID.
+
 ```mermaid
 sequenceDiagram
     participant Owner as Kind owner
     participant Applier as Target edits
-    Owner->>Applier: prepare (read-only, no identity)
-    Applier->>Applier: execute (mutate, place caret)
-    Applier-->>Owner: effect or resolution request
-    Owner->>Owner: resolve if requested, return outcome
+    Owner->>Applier: prepare deletion (read-only, no identity)
+    Applier->>Applier: execute prepared deletion
+    Applier-->>Owner: changed, unchanged, or resolution needed
+    Owner->>Owner: resolve proposal if needed
 ```
 
-Each shared edit runs in two phases. Preparation reads live state without
-changing it and without allocating proposal identity. What it resolves depends
-on the operation:
+Deletion execution uses the prepared target without looking up neighboring
+content again.
 
-- Insertion and paste supply a declarative plan.
-- Deletion resolves the addressed target, plus the affected span or resolution
-  request and any deletion proposal to continue.
-
-Execution then consumes that prepared work directly. For deletion, this means
-neighbors are not looked up a second time. Only deletion can request proposal
-resolution through this path; the kind owner carries it out.
-
-Because preparation reads live state, prepared work goes stale after any
-mutation. Deletion therefore prepares and executes consecutively inside one
-editor update, with no intervening mutation, and targets or prepared deletions
-are never stored across updates. Cut shows the rule in action: it preflights
-read-only for the clipboard write, discards that work, then prepares again for
-the deletion.
+Targets and prepared deletions depend on the current editor state and are never
+retained across updates. Deletion executes immediately after preparation, before
+any further mutation. Cut shows the rule in action: it preflights
+the deletion before writing to the clipboard, discards that preparation, then
+prepares again for the deletion after the clipboard write.
 
 Co-located tests cover preparation, refusal preservation, and caret placement.
 
@@ -291,9 +273,8 @@ Co-located tests cover preparation, refusal preservation, and caret placement.
 - Resolution acts on current proposal content, preserves unrelated pending
   work, and leaves no terminal resolution history. Batch resolution validates
   before mutation.
-- Accepted-state and all-accepted previews operate on detached content, leaving
-  the input and live editor unchanged. An indeterminate all-accepted preview
-  throws.
+- Previews leave the input document and live editor state unchanged. They do
+  not accept or reject pending proposals.
 
 Proposal editing and resolution rules live in the [behavior contract](docs/proposal-behavior.md).
 API usage examples live in the [package guide](packages/lexical-review/README.md)
