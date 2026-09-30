@@ -4,7 +4,7 @@ The published `lexical-review` package retains separate ESM and CommonJS builds 
 
 This layout originally followed Lexical's dual-module architecture. Starting with Lexical 0.51, [upstream PR #9127](https://github.com/facebook/lexical/pull/9127) publishes ESM only and preserves CommonJS consumers through Node's synchronous `require(esm)` support. Our CommonJS build can load those ESM dependencies on a compatible runtime; matching upstream's output format is not required. Publishing our own CommonJS build does not make Lexical 0.51 or later loadable through `require()` on older Node runtimes.
 
-The package contract tests ESM and CommonJS runtime imports and NodeNext declarations for the single framework-independent entrypoint. The unpublished v3 API replaces the earlier root/client split: removing the React wrapper removed its dependency boundary, and one entrypoint keeps extensions, nodes, and operations together. Node consumers verify imports and extension initialization without React or DOM globals. Because the contract describes the published package, its coverage and the build migration are one architectural seam: changes to the export map, runtime output, or declarations should be evaluated together.
+Package contract tests cover ESM and CommonJS runtime loading and NodeNext declaration resolution. Changes to the export map, runtime output, or declarations must preserve these consumer contracts.
 
 An ESM-only migration may simplify the build later, but must evaluate consumer runtime requirements, the declared peer range, NodeNext declaration resolution, and package contract coverage together. Treat it as a separate migration with an explicit semver assessment.
 
