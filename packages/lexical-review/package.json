@@ -1,7 +1,7 @@
 {
   "name": "lexical-review",
   "version": "3.0.0",
-  "description": "Review-mode editing for Lexical with framework-independent extensions",
+  "description": "Track-changes review mode for Lexical",
   "keywords": [
     "lexical",
     "suggestion",
