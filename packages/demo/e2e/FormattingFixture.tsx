@@ -17,8 +17,8 @@ import {
   ReviewInsertionNode,
   ReviewDeletionNode,
   type ReviewFormattingProperty,
+  registerReviewSession,
 } from "lexical-review";
-import { registerReviewSession } from "lexical-review/client";
 
 export function FormattingFixture() {
   const ref = useRef<HTMLDivElement>(null);
@@ -74,10 +74,10 @@ export function FormattingFixture() {
           { discrete: true },
         );
       },
-      format(property: ReviewFormattingProperty, route: "root" | "client") {
+      format(property: ReviewFormattingProperty, route: "direct" | "command") {
         editor.update(
           () => {
-            if (route === "root")
+            if (route === "direct")
               outcome = $toggleReviewFormatting(property, {
                 proposalIdFactory,
               }).status;
@@ -137,7 +137,7 @@ declare global {
       select(index: number, start: number, end?: number): void;
       format(
         property: ReviewFormattingProperty,
-        route: "root" | "client",
+        route: "direct" | "command",
       ): void;
       settle(action: "accept" | "reject" | "remove"): void;
       snapshot(): {

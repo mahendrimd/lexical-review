@@ -5,7 +5,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/?structure");
   await page.waitForFunction(() => window.__structureFixture !== undefined);
 });
-for (const route of ["root", "client", "keyboard"] as const) {
+for (const route of ["direct", "command", "keyboard"] as const) {
   test(`${route} split preserves subsequent typing when rejected`, async ({
     page,
   }) => {

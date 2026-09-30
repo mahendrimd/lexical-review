@@ -13,15 +13,9 @@ const buildInfoFile = path.join(packageDirectory, "tsconfig.build.tsbuildinfo");
 
 const inputs = {
   index: path.join(packageDirectory, "src/index.ts"),
-  client: path.join(packageDirectory, "src/client.ts"),
 };
 
-const external = [
-  /^@lexical(?:\/|$)/,
-  /^react(?:\/|$)/,
-  /^react-dom(?:\/|$)/,
-  /^lexical$/,
-];
+const external = [/^@lexical(?:\/|$)/, /^lexical$/];
 
 async function buildRuntime() {
   const bundle = await rolldown({

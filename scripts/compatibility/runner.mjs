@@ -12,9 +12,13 @@ const currentPackagePath = path.join(
   repositoryDirectory,
   "packages/lexical-review/package.json",
 );
+const demoPackagePath = path.join(
+  repositoryDirectory,
+  "packages/demo/package.json",
+);
 const lexicalPackageNames = [
   "@lexical/clipboard",
-  "@lexical/react",
+  "@lexical/extension",
   "@lexical/utils",
   "lexical",
 ];
@@ -199,19 +203,19 @@ export function getCurrentLexicalVersion(
 }
 
 export function getCurrentReactVersion(
-  packageJson = readJson(currentPackagePath),
+  packageJson = readJson(demoPackagePath),
 ) {
-  const versions = getReactVersions(packageJson, "devDependencies").map(
+  const versions = getReactVersions(packageJson, "dependencies").map(
     ({ name, version }) => ({
       name,
-      version: getDevelopmentVersion(version, "devDependencies", name),
+      version: getDevelopmentVersion(version, "dependencies", name),
     }),
   );
   const uniqueVersions = new Set(versions.map(({ version }) => version));
 
   if (uniqueVersions.size !== 1) {
     throw new Error(
-      `development React packages must use one aligned version: ${versions
+      `demo React packages must use one aligned version: ${versions
         .map(({ name, version }) => `${name}@${version}`)
         .join(", ")}.`,
     );
@@ -223,7 +227,7 @@ export function getCurrentReactVersion(
 export function assertE2EReactVersionAllowed(
   reactVersion,
   config = loadCompatibilityConfig(),
-  packageJson = readJson(currentPackagePath),
+  packageJson = readJson(demoPackagePath),
 ) {
   const allowedReactVersions = [
     ...new Set([
@@ -237,21 +241,6 @@ export function assertE2EReactVersionAllowed(
       `The E2E React compatibility version must be one of the configured lanes: ${allowedReactVersions.join(", ")}, received ${String(reactVersion)}.`,
     );
   }
-}
-
-function getReactPeerRange(packageJson) {
-  const ranges = getReactVersions(packageJson, "peerDependencies");
-  const uniqueRanges = new Set(ranges.map(({ version }) => version));
-
-  if (uniqueRanges.size !== 1) {
-    throw new Error(
-      `React peerDependencies must use one shared range: ${ranges
-        .map(({ name, version }) => `${name}@${String(version)}`)
-        .join(", ")}.`,
-    );
-  }
-
-  return ranges[0].version;
 }
 
 function validateVersionList(name, versions) {
@@ -381,31 +370,6 @@ function validateLexicalCompatibility(config, currentVersion, packageJson) {
   }
 }
 
-function validateReactCompatibility(config, packageJson) {
-  const currentReactVersion = getCurrentReactVersion(packageJson);
-  const reactPeerRange = getReactPeerRange(packageJson);
-  if (
-    typeof reactPeerRange !== "string" ||
-    reactPeerRange.trim() === "" ||
-    semver.validRange(reactPeerRange) == null
-  ) {
-    throw new Error(
-      `React peerDependencies must use a valid semver range, received ${reactPeerRange}.`,
-    );
-  }
-
-  const unsupportedReactVersions = [
-    currentReactVersion,
-    ...config.e2eReactVersions,
-  ].filter((version) => !semver.satisfies(version, reactPeerRange));
-
-  if (unsupportedReactVersions.length > 0) {
-    throw new Error(
-      `React peer range "${reactPeerRange}" does not cover the React major version(s) configured for compatibility: ${unsupportedReactVersions.join(", ")}.`,
-    );
-  }
-}
-
 export function validateCompatibilityConfig(
   config = loadCompatibilityConfig(),
   currentVersion = getCurrentLexicalVersion(),
@@ -413,7 +377,6 @@ export function validateCompatibilityConfig(
 ) {
   validateVersionLists(config);
   validateLexicalCompatibility(config, currentVersion, packageJson);
-  validateReactCompatibility(config, packageJson);
   return config;
 }
 
@@ -449,6 +412,7 @@ export function createE2ECompatibilityMatrix(
   currentVersion = getCurrentLexicalVersion(),
   requestedVersion = getRequestedVersion(),
   packageJson = readJson(currentPackagePath),
+  demoPackageJson = readJson(demoPackagePath),
 ) {
   validateCompatibilityConfig(config, currentVersion, packageJson);
 
@@ -460,7 +424,7 @@ export function createE2ECompatibilityMatrix(
     );
   }
 
-  const currentReactVersion = getCurrentReactVersion(packageJson);
+  const currentReactVersion = getCurrentReactVersion(demoPackageJson);
   const baselineLanes = lexicalVersions.map((lexicalVersion) => ({
     lexicalVersion,
     reactVersion: currentReactVersion,
@@ -833,6 +797,10 @@ function runCompatibility(version) {
     verifyInstalledLexicalGraph(version, environment);
     verifyInstalledReactGraph(currentReactVersion, environment);
     runPnpm(["--filter", "lexical-review", "build"], environment);
+    runPnpm(
+      ["exec", "node", "packages/lexical-review/package-contract/verify.mjs"],
+      environment,
+    );
     runPnpm(["test", "--run"], environment);
 
     if (isCurrentVersion) {

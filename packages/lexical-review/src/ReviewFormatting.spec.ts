@@ -25,8 +25,8 @@ import {
   ReviewDeletionNode,
   openReviewSession,
   validateReviewDocument,
+  registerReviewSession,
 } from "./index";
-import { registerReviewSession } from "./client";
 import {
   paragraph,
   reviewDocument,

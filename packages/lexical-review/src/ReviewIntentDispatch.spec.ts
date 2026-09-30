@@ -24,8 +24,8 @@ import {
   ReviewFormattingNode,
   ReviewBoundaryNode,
   openReviewSession,
+  registerReviewSession,
 } from "./index";
-import { registerReviewSession } from "./client";
 import {
   paragraph,
   reviewDocument,

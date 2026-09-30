@@ -17,8 +17,8 @@ import {
   openReviewSession,
   ReviewInsertionNode,
   ReviewDeletionNode,
+  registerReviewSession,
 } from "lexical-review";
-import { registerReviewSession } from "lexical-review/client";
 import { createEmptyHistoryState, registerHistory } from "@lexical/history";
 
 export function InsertionFixture() {
@@ -66,10 +66,10 @@ export function InsertionFixture() {
           { discrete: true },
         );
       },
-      insert(value: string, route: "root" | "client") {
+      insert(value: string, route: "direct" | "command") {
         editor.update(
           () => {
-            if (route === "root")
+            if (route === "direct")
               lastOutcome = $insertReviewText(value, {
                 proposalIdFactory: factory,
               }).status;
@@ -149,7 +149,7 @@ declare global {
   interface Window {
     __insertionFixture?: {
       select(index: number, start: number, end?: number): void;
-      insert(value: string, route: "root" | "client"): void;
+      insert(value: string, route: "direct" | "command"): void;
       settle(action: "accept" | "reject" | "remove"): void;
       remove(index: number, start: number, end: number): void;
       ambiguous(): void;

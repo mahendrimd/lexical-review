@@ -1,41 +1,29 @@
-import { LexicalComposer } from "@lexical/react/LexicalComposer";
-import {
-  ReviewBoundaryNode,
-  ReviewDeletionNode,
-  ReviewFormattingNode,
-  ReviewFragmentNode,
-  ReviewInsertionNode,
-} from "lexical-review";
+import { LexicalExtensionComposer } from "@lexical/react/LexicalExtensionComposer";
+import { defineExtension } from "lexical";
+import { ReviewExtension } from "lexical-review";
 import "./index.css";
 import ScenarioRailDemo from "./ScenarioRailDemo";
 
 const AUTHORING_DOCS_URL =
   "https://github.com/mahendrimd/lexical-review/blob/main/packages/lexical-review/README.md";
 
-function App() {
-  const initialConfig = {
-    onError(error: Error) {
-      throw error;
+const editorExtension = defineExtension({
+  name: "scenario-rail-demo",
+  namespace: "scenario-rail-demo",
+  dependencies: [ReviewExtension],
+  theme: {
+    ins: "review-insertion",
+    del: "review-deletion",
+    text: {
+      bold: "font-bold",
+      italic: "italic",
+      underline: "underline",
+      strikethrough: "line-through",
     },
-    nodes: [
-      ReviewInsertionNode,
-      ReviewDeletionNode,
-      ReviewFormattingNode,
-      ReviewFragmentNode,
-      ReviewBoundaryNode,
-    ],
-    theme: {
-      ins: "review-insertion",
-      del: "review-deletion",
-      text: {
-        bold: "font-bold",
-        italic: "italic",
-        underline: "underline",
-        strikethrough: "line-through",
-      },
-    },
-  };
+  },
+});
 
+function App() {
   return (
     <div className="demo-app">
       <header className="site-header">
@@ -72,14 +60,12 @@ function App() {
           Start with a text suggestion ↓
         </a>
       </div>
-      <LexicalComposer
-        initialConfig={{
-          ...initialConfig,
-          namespace: "scenario-rail-demo",
-        }}
+      <LexicalExtensionComposer
+        extension={editorExtension}
+        contentEditable={null}
       >
         <ScenarioRailDemo />
-      </LexicalComposer>
+      </LexicalExtensionComposer>
       <footer className="site-footer">
         demo for lexical-review · built by Mahendri Dwicahyo
       </footer>

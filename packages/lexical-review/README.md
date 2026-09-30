@@ -1,167 +1,233 @@
 # lexical-review
 
-Track-changes review mode for [Lexical](https://lexical.dev/). Pending proposals live as proposal-bearing Lexical nodes in the current `EditorState` and render as review markers alongside accepted content.
+Track-changes review mode for [Lexical](https://lexical.dev/). Author pending revision proposals, then accept, reject, or remove them independently.
 
 [Try the live demo](https://mahendrimd.github.io/lexical-review/) · [View the npm package](https://www.npmjs.com/package/lexical-review) · [Report an issue](https://github.com/mahendrimd/lexical-review/issues)
 
-This guide walks through installation, editor integration, and API usage.
-Start with [installation](#installation), choose an [entrypoint](#entrypoints),
-then follow the [core loop](#core-loop) to open and register a session.
-
-For editing rules and resolution effects, see the
+For supported editing behavior, see the
 [proposal behavior contract](https://github.com/mahendrimd/lexical-review/blob/main/docs/proposal-behavior.md).
-For implementation responsibilities and state ownership, see the
-[architecture](https://github.com/mahendrimd/lexical-review/blob/main/ARCHITECTURE.md).
 
 ## Installation
 
 ```bash
 npm install lexical-review \
   'lexical@>=0.47.0 <0.53.0' \
-  '@lexical/react@>=0.47.0 <0.53.0' \
   '@lexical/clipboard@>=0.47.0 <0.53.0' \
-  '@lexical/utils@>=0.47.0 <0.53.0' \
-  react react-dom
+  '@lexical/extension@>=0.47.0 <0.53.0' \
+  '@lexical/utils@>=0.47.0 <0.53.0'
 ```
 
-## Compatibility
-
-The package declares Lexical peer compatibility `>=0.47.0 <0.53.0`.
-`lexical`, `@lexical/react`, `@lexical/clipboard`, and `@lexical/utils` must
-be installed at the same version within that range.
-
-The package declares React peer compatibility for React 18 and React 19, and
-`react` and `react-dom` must use the same version. All declared peers are
-required at installation, including the React peers for consumers using only
-the root entrypoint.
-
-CI exercises the supported Lexical minors and browser boundary scenarios in
-Chromium, Firefox, and Playwright WebKit. Playwright WebKit results do not
-certify native Safari or iOS Safari.
-
-## Entrypoints
-
-| Entrypoint              | Purpose                                                      | Example exports                                |
-| ----------------------- | ------------------------------------------------------------ | ---------------------------------------------- |
-| `lexical-review`        | Core nodes, document and session APIs, and review operations | `ReviewInsertionNode`, `openReviewSession`     |
-| `lexical-review/client` | Browser editor registration and React integration            | `registerReviewSession`, `ReviewSessionPlugin` |
-
-The root entrypoint has no runtime imports of `react` or `@lexical/react` and
-is suitable for server-side model and serialization code. DOM rendering and
-editor registration require a client environment.
-
-For browser integration, call `registerReviewSession` with a `LexicalEditor`
-from plain JavaScript, Vue, Svelte, or another framework. React hosts can use
-`ReviewSessionPlugin`, which manages registration and cleanup through an
-effect. Both exports share the client entrypoint, whose runtime imports include
-`react` and `@lexical/react` even when calling `registerReviewSession` directly.
+Install all four Lexical peers at the same version within the declared range.
 
 ## Core loop
 
-Open a validated native v3 review document against an editor, register the session, then inspect or resolve proposals by ID:
+Import public APIs from `lexical-review`. `ReviewExtension` registers all review
+nodes and manages browser input and cleanup.
+
+The package can be imported without DOM globals; rendering and browser input
+require a DOM environment.
+
+The extension can open a native v3 review document at startup or later. Both
+paths validate input before changing editor content and starting review input:
+
+| When                                                 | Use                                | Validation failure                                                              |
+| ---------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------- |
+| During editor creation                               | Configure `initialDocument: input` | Editor creation throws                                                          |
+| After editor creation, including switching documents | Call `review.openDocument(input)`  | Returns `invalid` or `unsupported`, preserving the current document and session |
+
+For document input (`input`) available at startup:
 
 ```ts
+import {
+  buildEditorFromExtensions,
+  getExtensionDependencyFromEditor,
+} from "@lexical/extension";
+import { configExtension } from "lexical";
 import {
   $inspectReviewProposal,
   $resolveReviewProposal,
   $resolveReviewProposals,
-  openReviewSession,
+  ReviewExtension,
 } from "lexical-review";
-import { registerReviewSession } from "lexical-review/client";
 
-const session = openReviewSession(editor, initialDocument);
-if (session.status !== "valid") {
-  throw new Error(session.issues[0]?.message ?? "Invalid review document.");
-}
-const cleanup = registerReviewSession(editor, session.value, { onOutcome });
-// ... later: cleanup();
+const editor = buildEditorFromExtensions(
+  configExtension(ReviewExtension, { initialDocument: input }),
+);
+editor.setRootElement(element);
+const review = getExtensionDependencyFromEditor(editor, ReviewExtension).output;
 
 editor.getEditorState().read(() => $inspectReviewProposal(proposalId));
-// Returns a kind-tagged proposal: insertion, deletion, replacement,
-// formatting, structure, or fragment.
+editor.update(() => $resolveReviewProposal(proposalId, "accept"), {
+  discrete: true,
+});
+editor.update(() => $resolveReviewProposals(ids, "reject"), { discrete: true }); // also "remove"
 
-editor.update(() => $resolveReviewProposal(proposalId, "accept"));
-// Alternatively: "reject" or "remove", each inside editor.update().
-editor.update(() => $resolveReviewProposals(ids, "accept"));
-// Batch variant: validates every ID before mutation, resolves each once.
+const saved = review.session.value?.exportDocument();
+// Persist saved.value when saved?.status === "valid".
 ```
 
-Opening validates before installing any state. The session reads and updates
-the live `EditorState`; it does not keep a parallel authoritative snapshot.
-Serialization preserves current pending proposals only, with no resolution
-history.
+`exportDocument()` returns a validation result containing accepted content and
+current pending proposals. Saving leaves the session active.
 
-Register the session with the same editor that opened it, and call the returned
-cleanup function when detaching it. In React, use
-`<ReviewSessionPlugin session={session.value} />` inside that editor's
-`LexicalComposer` to manage this lifecycle.
+### Session lifecycle
 
-Through a registered session, proposal resolution is also available as
-`RESOLVE_REVIEW_PROPOSALS_COMMAND` with payload `{ ids, action }`.
+`initialDocument` defaults to `null`, so an editor created without document input
+waits for `openDocument()`. That call returns a `ValidationResult<ReviewSession>`:
+`valid` provides the session in `value`, `invalid` provides `issues`, and
+`unsupported` provides a `reason`.
 
-Unexpected implementation errors propagate to Lexical's update error handling and rollback; do not swallow them inside the update callback.
+`review.closeSession()` stops review input without changing the editor content.
+Opening a valid document starts input handling again. Dispose the editor when
+finished to release its handlers.
 
 ### Registration options
 
-The default calls need no options: proposal IDs are generated, deletion is by character, and copy exports the all-accepted projection. Hosts that need more pass them to the registration:
+Pass options through `configExtension(ReviewExtension, { options })` or the third
+argument of `registerReviewSession`. To update an extension's options without
+reopening its document, replace `review.options.value`:
 
 ```ts
-registerReviewSession(editor, session.value, {
-  copyProjection: "accepted-state", // or "all-accepted" (default)
-  onOutcome, // a claimed command may still report `refused`; plus onInsertionOutcome / onDeletionOutcome
-});
+review.options.value = {
+  ...review.options.value,
+  copyProjection: "accepted-state", // default: "all-accepted"
+  onOutcome: (outcome) => console.log(outcome.status),
+};
 ```
 
-A custom `proposalIdFactory` is only needed when an external scheme owns identity, such as server-assigned IDs or deterministic tests. In that case, pass the same factory to the registration and to each direct call, so typed and programmatic proposals share one scheme:
+Avoid changing options during text composition. `onOutcome` reports routed
+operation outcomes, including refusals.
+
+Proposal IDs are generated by default. If your application supplies a
+`proposalIdFactory`, use the same factory in registration options and direct
+calls such as `$insertReviewText(text, { proposalIdFactory })`. Factories must
+produce unique, valid IDs; failure to obtain one refuses the operation before
+mutation.
+
+## Integration alternatives
+
+### React
+
+Define a stable extension outside the component and pass it to
+`LexicalExtensionComposer`:
+
+```tsx
+import { LexicalExtensionComposer } from "@lexical/react/LexicalExtensionComposer";
+import { ContentEditable } from "@lexical/react/LexicalContentEditable";
+import { configExtension, defineExtension } from "lexical";
+import { ReviewExtension } from "lexical-review";
+
+const extension = defineExtension({
+  name: "my-review-editor",
+  dependencies: [configExtension(ReviewExtension, { initialDocument: input })],
+});
+
+function Editor() {
+  return (
+    <LexicalExtensionComposer extension={extension} contentEditable={null}>
+      <ContentEditable />
+    </LexicalExtensionComposer>
+  );
+}
+```
+
+Child components can get the editor through `useLexicalComposerContext` and
+retrieve the same extension output with
+`getExtensionDependencyFromEditor(editor, ReviewExtension).output`, then call
+`openDocument(input)` to switch documents or open one loaded after initialization.
+
+### Direct registration
+
+For an editor created with `createEditor`, register `ReviewInsertionNode`,
+`ReviewDeletionNode`, `ReviewFormattingNode`, `ReviewBoundaryNode`, and
+`ReviewFragmentNode`, then open and register a session:
 
 ```ts
-// Custom-scheme hosts only:
-const proposalIdFactory = () => crypto.randomUUID();
-editor.update(() => {
-  $insertReviewText("new text", { proposalIdFactory });
-});
+import { openReviewSession, registerReviewSession } from "lexical-review";
+
+const opened = openReviewSession(editor, input);
+if (opened.status === "valid") {
+  const cleanup = registerReviewSession(editor, opened.value);
+  // Call cleanup() when detaching review input.
+}
 ```
 
-Custom factories must return unique, valid IDs; duplicates, invalid identities, and factory failures are refused before mutation.
+Use the same editor for both calls. Choose either direct registration or
+`ReviewExtension` for each active session to avoid duplicate input handlers.
 
 ## Authoring operations
 
-Call these inside `editor.update()`. The client route sends typing, deletion, formatting, Enter, clipboard, and composition input through the same operations. Behavior details (continuation, neighbor targeting, caret placement, refusals) are in the [behavior contract](https://github.com/mahendrimd/lexical-review/blob/main/docs/proposal-behavior.md).
+Call these operations inside `editor.update()`.
 
-| Operation                                                                       | Use                                                                                                         |
-| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `$insertReviewText(text, options?)` / `$replaceReviewText(text, options?)`      | Insert, replace, or delete a text range; selecting accepted text creates a replacement under one ID         |
-| `$deleteReviewText(backward, options?)`                                         | Delete at the selection; `granularity` is `"character"` (default) or `"word"`                               |
-| `$setReviewFormatting(value)` / `$toggleReviewFormatting(property)`             | Propose `bold`, `italic`, `underline`, or `strikethrough` on accepted text; register `ReviewFormattingNode` |
-| `$splitReviewParagraph(options?)` / `$mergeReviewParagraph(backward, options?)` | Propose a paragraph split or merge; register `ReviewBoundaryNode`                                           |
-| `$insertReviewFragment(paragraphs, options?)`                                   | Insert normalized `{ runs, emptyFormat? }` paragraphs as one atomic proposal; register `ReviewFragmentNode` |
-| `createReviewPreview(document, "accepted-state" \| "all-accepted")`             | Read-only detached preview; an indeterminate all-accepted projection throws                                 |
+| Operation                                                                       | Use                                                                                                 |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `$insertReviewText(text, options?)`                                             | Insert inline text or replace a selected range                                                      |
+| `$replaceReviewText(text, options?)`                                            | Replace a selected range; an empty string deletes it                                                |
+| `$deleteReviewText(backward, options?)`                                         | Delete backward (`true`) or forward (`false`); `granularity` is `"character"` (default) or `"word"` |
+| `$setReviewFormatting(value)` / `$toggleReviewFormatting(property)`             | Propose `bold`, `italic`, `underline`, or `strikethrough`                                           |
+| `$splitReviewParagraph(options?)` / `$mergeReviewParagraph(backward, options?)` | Propose a paragraph split or merge                                                                  |
+| `$insertReviewFragment(paragraphs, options?)`                                   | Insert ordered text and paragraphs as one atomic proposal                                           |
 
 ```ts
+import { $insertReviewText } from "lexical-review";
+
 editor.update(() => {
   const outcome = $insertReviewText("new text");
-  // Handle changed, unchanged, or refused outcomes.
+  // Handle changed, unchanged, refused, or failed.
 });
 ```
 
+A `refused` outcome includes a code and message and preserves content, pending
+proposals, and selection. See [operation outcomes](https://github.com/mahendrimd/lexical-review/blob/main/ARCHITECTURE.md#operation-outcomes)
+for failure handling and guarantees.
+
+Fragment input uses `{ runs, emptyFormat? }` paragraphs. Each run contains text
+and a format bitmask: bold `1`, italic `2`, strikethrough `4`, and underline `8`.
+
 ```ts
-$insertReviewFragment([
-  { runs: [{ text: "x", format: 1 }] }, // format bitmask: bold 1, italic 2, strikethrough 4, underline 8
-  { runs: [{ text: "y", format: 0 }] },
-]);
+import { $insertReviewFragment } from "lexical-review";
+
+editor.update(() => {
+  $insertReviewFragment([
+    { runs: [{ text: "first paragraph", format: 1 }] }, // bold
+    { runs: [{ text: "second paragraph", format: 0 }] },
+  ]);
+});
 ```
 
-`INSERT_REVIEW_FRAGMENT_COMMAND` from `lexical-review/client` accepts already-normalized fragment content.
-
-## Rendering contract
-
-For inserted and deleted text, the review marker is always the outermost DOM element. Lexical formatting and inline styles are nested inside the marker, for example: `<ins><strong>inserted text</strong></ins>`. A pending merge displays `¶` inside `<del data-review-boundary="merge">`.
+`INSERT_REVIEW_FRAGMENT_COMMAND` accepts the same fragment content.
+`RESOLVE_REVIEW_PROPOSALS_COMMAND` accepts `{ ids, action }`, where `action` is
+`"accept"`, `"reject"`, or `"remove"`.
 
 ## Clipboard
 
-- Copy and cut export content only (`text/plain` and `text/html`) with no proposal identity. Defaults to `copyProjection: "all-accepted"`; opt in to `"accepted-state"` when needed. See [clipboard projections](https://github.com/mahendrimd/lexical-review/blob/main/docs/proposal-behavior.md#clipboard-projections) for what each mode includes.
-- Paste and copy-style drop insert through the same single-paragraph or atomic-fragment operations. Foreign markup never gains proposal identity.
+Copy and cut export plain text and HTML without proposal identity. The default
+`copyProjection` is `"all-accepted"`; use `"accepted-state"` for accepted content
+only. See [clipboard projections](https://github.com/mahendrimd/lexical-review/blob/main/docs/proposal-behavior.md#clipboard-projections)
+for what each mode includes. Pasting or dropping review-marked content does not
+transfer its proposal IDs.
+
+## Previews
+
+`createReviewPreview(document, mode)` returns a validation result for a detached
+review document. Use `"accepted-state"` to show accepted content or `"all-accepted"`
+to show the outcome of accepting every pending proposal. Neither changes the
+source document or live editor, and neither needs an `editor.update()` call.
+An indeterminate all-accepted preview throws.
+
+## Rendering
+
+Inserted and deleted text use outermost `<ins>` and `<del>` markers, with Lexical
+formatting nested inside: `<ins><strong>inserted text</strong></ins>`. A pending
+paragraph merge displays `¶` inside `<del data-review-boundary="merge">`.
+
+## Migrating from v2
+
+V3 replaces the v2 text-node representation with proposal-bearing nodes and
+native v3 review documents. There is no automatic v2 document conversion.
+Replace `ReviewTextPlugin` or `registerReviewText` with the integration shown
+above, then use proposal IDs for inspection and resolution.
 
 ## Interchange
 
-The [`lexical-review-wer` package](https://github.com/mahendrimd/lexical-review/blob/main/packages/lexical-review-wer/README.md) owns the WER export boundary. Its guide describes the current export limitation; general import/export mapping is unimplemented.
+For WER interchange support and limitations, see the separate
+[`lexical-review-wer` package guide](https://github.com/mahendrimd/lexical-review/blob/main/packages/lexical-review-wer/README.md).

@@ -23,8 +23,8 @@ import {
   ReviewDeletionNode,
   ReviewInsertionNode,
   validateReviewDocument,
+  registerReviewSession,
 } from "./index";
-import { registerReviewSession } from "./client";
 import {
   paragraph,
   reviewDocument,

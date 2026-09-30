@@ -16,8 +16,8 @@ import {
   openReviewSession,
   ReviewInsertionNode,
   ReviewDeletionNode,
+  registerReviewSession,
 } from "lexical-review";
-import { registerReviewSession } from "lexical-review/client";
 
 export function DeletionFixture() {
   const ref = useRef<HTMLDivElement>(null);

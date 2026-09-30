@@ -20,7 +20,7 @@ For Lexical source inspection, API questions, implementation, debugging, upgrade
 
 ## Architecture and tests
 
-- Keep the package root React-free; browser and editor integration belongs in the client entrypoint.
+- Keep the package API framework-independent and safe to import without DOM globals.
 
 ## Commits and pull requests
 

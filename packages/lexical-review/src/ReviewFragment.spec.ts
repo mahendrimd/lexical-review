@@ -24,11 +24,9 @@ import {
   openReviewSession,
   validateReviewDocument,
   createReviewPreview,
-} from "./index";
-import {
   INSERT_REVIEW_FRAGMENT_COMMAND,
   registerReviewSession,
-} from "./client";
+} from "./index";
 import {
   paragraph,
   text,
@@ -329,7 +327,7 @@ it("rejects malformed shared IDs and ownership on import", () => {
   saved.value.root.children[1].children[0].startsParagraph = false;
   expect(validateReviewDocument(saved.value).status).toBe("invalid");
 });
-it("client semantic command is route neutral and DOM wraps formatting inside ins", () => {
+it("fragment command is route neutral and DOM wraps formatting inside ins", () => {
   const s = setup();
   const root = document.createElement("div");
   document.body.append(root);

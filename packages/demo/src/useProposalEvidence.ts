@@ -8,8 +8,8 @@ import {
   exportReviewDocument,
   type ReviewIntentRefusal,
   type ReviewProposalSnapshot,
+  RESOLVE_REVIEW_PROPOSALS_COMMAND,
 } from "lexical-review";
-import { RESOLVE_REVIEW_PROPOSALS_COMMAND } from "lexical-review/client";
 import { deriveEvidenceStatus, type EvidenceStatus } from "./evidenceStatus";
 
 export type ProposalInspection =

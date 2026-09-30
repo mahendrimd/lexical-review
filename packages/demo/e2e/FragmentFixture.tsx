@@ -17,11 +17,10 @@ import {
   ReviewFormattingNode,
   ReviewInsertionNode,
   ReviewDeletionNode,
-} from "lexical-review";
-import {
   INSERT_REVIEW_FRAGMENT_COMMAND,
   registerReviewSession,
-} from "lexical-review/client";
+} from "lexical-review";
+
 export function FragmentFixture() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -63,7 +62,7 @@ export function FragmentFixture() {
       },
     });
     window.__fragmentFixture = {
-      insert(value, route = "client") {
+      insert(value, route = "command") {
         editor.update(
           () => {
             if (!$getSelection()) $getRoot().getAllTextNodes()[0]!.select(1, 1);
@@ -71,7 +70,7 @@ export function FragmentFixture() {
               runs: text ? [{ text, format: 0 }] : [],
               emptyFormat: 0,
             }));
-            if (route === "root")
+            if (route === "direct")
               outcome = $insertReviewFragment(fragment, options).status;
             else
               editor.dispatchCommand(INSERT_REVIEW_FRAGMENT_COMMAND, fragment);
@@ -146,7 +145,7 @@ export function FragmentFixture() {
 declare global {
   interface Window {
     __fragmentFixture?: {
-      insert(value: string, route?: "root" | "client"): void;
+      insert(value: string, route?: "direct" | "command"): void;
       endpoint(
         side: "start" | "end",
         association: "proposal" | "accepted",

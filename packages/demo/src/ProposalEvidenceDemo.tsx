@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getExtensionDependencyFromEditor } from "@lexical/extension";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import {
@@ -12,13 +13,9 @@ import {
   $insertReviewText,
   $isReviewInsertionNode,
   $listReviewProposals,
-  openReviewSession,
-  type ReviewSession,
-} from "lexical-review";
-import {
-  ReviewSessionPlugin,
+  ReviewExtension,
   type ReviewIntentOutcome,
-} from "lexical-review/client";
+} from "lexical-review";
 import {
   EVIDENCE_STATUS_TEXT,
   useProposalEvidence,
@@ -43,7 +40,10 @@ export default function ProposalEvidenceDemo({
   onEditorReady?: (editor: LexicalEditor) => void;
 }) {
   const [editor] = useLexicalComposerContext();
-  const [session, setSession] = useState<ReviewSession | null>(null);
+  const review = getExtensionDependencyFromEditor(
+    editor,
+    ReviewExtension,
+  ).output;
   const [outcome, setOutcome] = useState<ReviewIntentOutcome | null>(null);
   const [outcomeCount, setOutcomeCount] = useState(0);
   const {
@@ -70,7 +70,10 @@ export default function ProposalEvidenceDemo({
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    review.options.value = {
+      proposalIdFactory: factory,
+      onOutcome: handleOutcome,
+    };
     editor.update(
       () => {
         $getRoot()
@@ -80,7 +83,7 @@ export default function ProposalEvidenceDemo({
       { discrete: true },
     );
     const input = editor.getEditorState().toJSON();
-    const opened = openReviewSession(editor, {
+    const opened = review.openDocument({
       root: {
         ...input.root,
         $: { "lexical-review": { version: 3, extensions: [] } },
@@ -88,11 +91,8 @@ export default function ProposalEvidenceDemo({
     });
     if (opened.status !== "valid")
       throw new Error("Invalid proposal-evidence demo");
-    if (!cancelled) setSession(opened.value);
-    return () => {
-      cancelled = true;
-    };
-  }, [editor]);
+    return () => review.closeSession();
+  }, [editor, review, factory, handleOutcome]);
 
   useEffect(() => {
     onEditorReady?.(editor);
@@ -342,14 +342,6 @@ export default function ProposalEvidenceDemo({
           <p>Reported outcomes this baseline: {outcomeCount}</p>
         </div>
       </section>
-
-      {session === null ? null : (
-        <ReviewSessionPlugin
-          session={session}
-          proposalIdFactory={factory}
-          onOutcome={handleOutcome}
-        />
-      )}
     </div>
   );
 }

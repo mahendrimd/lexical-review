@@ -48,7 +48,7 @@ for (const action of ["accept", "reject", "remove"] as const) {
   }) => {
     await page.evaluate((action) => {
       window.__insertionFixture!.select(0, 0, 2);
-      window.__insertionFixture!.insert("new", "client");
+      window.__insertionFixture!.insert("new", "command");
       window.__insertionFixture!.settle(action);
     }, action);
     const editor = page.getByTestId("insertion-editor");

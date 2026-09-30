@@ -1,0 +1,111 @@
+import review = require("lexical-review");
+import lexical = require("lexical");
+import extensions = require("@lexical/extension");
+
+const nodeClass: typeof review.ReviewInsertionNode = review.ReviewInsertionNode;
+const editor = lexical.createEditor({
+  nodes: [review.ReviewInsertionNode, review.ReviewDeletionNode],
+  onError: (error) => void error,
+});
+const opened: review.ValidationResult<review.ReviewSession> =
+  review.openReviewSession(editor, {
+    root: {
+      children: [
+        {
+          children: [],
+          direction: null,
+          format: "",
+          indent: 0,
+          textFormat: 0,
+          textStyle: "",
+          type: "paragraph",
+          version: 1,
+        },
+      ],
+      direction: null,
+      format: "",
+      indent: 0,
+      type: "root",
+      version: 1,
+      $: { "lexical-review": { extensions: [], version: 3 } },
+    },
+  });
+
+void nodeClass;
+void opened;
+
+// Compile host integration against published declarations, without executing it.
+const options: review.ReviewSessionRegistrationOptions = {
+  copyProjection: "accepted-state",
+  proposalIdFactory: () => "consumer-proposal",
+  onOutcome: (outcome) => {
+    const result: review.ReviewIntentOutcome = outcome;
+    void result;
+  },
+};
+const config: review.ReviewExtensionConfig = { initialDocument: null, options };
+const extension = lexical.configExtension(review.ReviewExtension, config);
+const extensionEditor = extensions.buildEditorFromExtensions(extension);
+const output = extensions.getExtensionDependencyFromEditor(
+  extensionEditor,
+  review.ReviewExtension,
+).output;
+const publicOutput: review.ReviewExtensionOutput = output;
+const session: review.ReviewSession | null = output.session.value;
+const openResult: review.ValidationResult<review.ReviewSession> =
+  output.openDocument({});
+const saved: review.ValidationResult<review.ReviewDocumentV3> | undefined =
+  output.session.value?.exportDocument();
+output.options.value = options;
+const closed: void = output.closeSession();
+
+// @ts-expect-error The session signal is read-only for consumers.
+output.session.value = null;
+// @ts-expect-error Only supported clipboard projection modes are accepted.
+output.options.value = { copyProjection: "unknown" };
+
+const fragment: review.ReviewFragment = [
+  { runs: [{ text: "consumer", format: 0 }] },
+];
+const resolution: review.ReviewResolutionRoutePayload = {
+  ids: ["consumer-proposal"],
+  action: "accept",
+};
+extensionEditor.dispatchCommand(
+  review.INSERT_REVIEW_FRAGMENT_COMMAND,
+  fragment,
+);
+extensionEditor.dispatchCommand(
+  review.RESOLVE_REVIEW_PROPOSALS_COMMAND,
+  resolution,
+);
+extensionEditor.dispatchCommand(
+  review.INSERT_REVIEW_FRAGMENT_COMMAND,
+  // @ts-expect-error Fragment commands require paragraph content.
+  "text",
+);
+const invalidResolution = { ids: [], action: "unknown" } as const;
+extensionEditor.dispatchCommand(
+  review.RESOLVE_REVIEW_PROPOSALS_COMMAND,
+  // @ts-expect-error Resolution actions are restricted to accept, reject, or remove.
+  invalidResolution,
+);
+
+const register: (
+  editor: lexical.LexicalEditor,
+  session: review.ReviewSession,
+  options?: review.ReviewSessionRegistrationOptions,
+) => () => void = review.registerReviewSession;
+if (openResult.status === "valid") {
+  const cleanup: () => void = review.registerReviewSession(
+    extensionEditor,
+    openResult.value,
+    options,
+  );
+  void cleanup;
+}
+void publicOutput;
+void session;
+void saved;
+void closed;
+void register;

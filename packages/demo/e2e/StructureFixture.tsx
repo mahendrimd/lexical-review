@@ -17,8 +17,8 @@ import {
   ReviewFormattingNode,
   ReviewInsertionNode,
   ReviewDeletionNode,
+  registerReviewSession,
 } from "lexical-review";
-import { registerReviewSession } from "lexical-review/client";
 
 export function StructureFixture() {
   const ref = useRef<HTMLDivElement>(null);
@@ -98,7 +98,7 @@ export function StructureFixture() {
       split(route) {
         editor.update(
           () => {
-            if (route === "root")
+            if (route === "direct")
               outcome = $splitReviewParagraph({ proposalIdFactory }).status;
             else editor.dispatchCommand(INSERT_PARAGRAPH_COMMAND, undefined);
           },
@@ -163,7 +163,7 @@ declare global {
       paragraph(index: number): void;
       select(index: number, start: number, end?: number): void;
       marker(side: "left" | "right"): void;
-      split(route: "root" | "client"): void;
+      split(route: "direct" | "command"): void;
       settle(ids: string[], action: "accept" | "reject" | "remove"): void;
       snapshot(): unknown;
     };
