@@ -32,3 +32,13 @@ const opened: review.ValidationResult<review.ReviewSession> =
 
 void nodeClass;
 void opened;
+
+const extension = lexical.configExtension(review.ReviewExtension, {
+  options: { copyProjection: "accepted-state" },
+});
+const register: (
+  editor: lexical.LexicalEditor,
+  session: review.ReviewSession,
+) => () => void = review.registerReviewSession;
+void extension;
+void register;

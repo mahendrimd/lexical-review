@@ -1,28 +1,27 @@
 import { useCallback, useEffect, useRef } from "react";
-import { LexicalComposer } from "@lexical/react/LexicalComposer";
+import { LexicalExtensionComposer } from "@lexical/react/LexicalExtensionComposer";
 import {
+  ReviewExtension,
+  $listReviewProposals,
+  exportReviewDocument,
+} from "lexical-review";
+import {
+  defineExtension,
   $getRoot,
   $getSelection,
   $isRangeSelection,
   type LexicalEditor,
 } from "lexical";
-import {
-  $listReviewProposals,
-  exportReviewDocument,
-  ReviewDeletionNode,
-  ReviewFormattingNode,
-  ReviewInsertionNode,
-} from "lexical-review";
+
 import ProposalEvidenceDemo from "../src/ProposalEvidenceDemo";
 
+const editorExtension = defineExtension({
+  name: "proposal-evidence-browser",
+  namespace: "proposal-evidence-browser",
+  dependencies: [ReviewExtension],
+});
+
 export function ProposalEvidenceFixture() {
-  const initialConfig = {
-    namespace: "proposal-evidence-browser",
-    onError(error: Error) {
-      throw error;
-    },
-    nodes: [ReviewInsertionNode, ReviewDeletionNode, ReviewFormattingNode],
-  };
   const editorRef = useRef<LexicalEditor | null>(null);
   const handleEditor = useCallback((editor: LexicalEditor) => {
     editorRef.current = editor;
@@ -89,9 +88,12 @@ export function ProposalEvidenceFixture() {
 
   return (
     <div style={{ maxWidth: "100%", overflowX: "hidden" }}>
-      <LexicalComposer initialConfig={initialConfig}>
+      <LexicalExtensionComposer
+        extension={editorExtension}
+        contentEditable={null}
+      >
         <ProposalEvidenceDemo onEditorReady={handleEditor} />
-      </LexicalComposer>
+      </LexicalExtensionComposer>
     </div>
   );
 }

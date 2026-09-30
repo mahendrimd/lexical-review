@@ -1,37 +1,28 @@
 import { useCallback, useEffect, useRef } from "react";
-import { LexicalComposer } from "@lexical/react/LexicalComposer";
+import { LexicalExtensionComposer } from "@lexical/react/LexicalExtensionComposer";
 import {
+  ReviewExtension,
+  $listReviewProposals,
+  exportReviewDocument,
+} from "lexical-review";
+import {
+  defineExtension,
   $getRoot,
   $getSelection,
   $isRangeSelection,
   type LexicalEditor,
 } from "lexical";
-import {
-  $listReviewProposals,
-  exportReviewDocument,
-  ReviewBoundaryNode,
-  ReviewDeletionNode,
-  ReviewFormattingNode,
-  ReviewFragmentNode,
-  ReviewInsertionNode,
-} from "lexical-review";
+
 import "../src/index.css";
 import ScenarioRailDemo from "../src/ScenarioRailDemo";
 
+const editorExtension = defineExtension({
+  name: "scenario-rail-browser",
+  namespace: "scenario-rail-browser",
+  dependencies: [ReviewExtension],
+});
+
 export function ScenarioRailFixture() {
-  const initialConfig = {
-    namespace: "scenario-rail-browser",
-    onError(error: Error) {
-      throw error;
-    },
-    nodes: [
-      ReviewInsertionNode,
-      ReviewDeletionNode,
-      ReviewFormattingNode,
-      ReviewFragmentNode,
-      ReviewBoundaryNode,
-    ],
-  };
   const editorRef = useRef<LexicalEditor | null>(null);
   const handleEditor = useCallback((editor: LexicalEditor) => {
     editorRef.current = editor;
@@ -93,9 +84,12 @@ export function ScenarioRailFixture() {
     // No overflow clipping here: the responsive test must observe the demo's
     // own page-level overflow behavior.
     <div style={{ maxWidth: "100%" }}>
-      <LexicalComposer initialConfig={initialConfig}>
+      <LexicalExtensionComposer
+        extension={editorExtension}
+        contentEditable={null}
+      >
         <ScenarioRailDemo onEditorReady={handleEditor} />
-      </LexicalComposer>
+      </LexicalExtensionComposer>
     </div>
   );
 }

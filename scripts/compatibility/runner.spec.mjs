@@ -16,20 +16,19 @@ const E2E_REACT_VERSIONS = ["18.3.1"];
 const lexicalPackageManifest = {
   peerDependencies: {
     "@lexical/clipboard": LEXICAL_PEER_RANGE,
-    "@lexical/react": LEXICAL_PEER_RANGE,
+    "@lexical/extension": LEXICAL_PEER_RANGE,
     "@lexical/utils": LEXICAL_PEER_RANGE,
     lexical: LEXICAL_PEER_RANGE,
-    react: "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0",
   },
   devDependencies: {
     "@lexical/clipboard": "0.50.0",
-    "@lexical/react": "0.50.0",
+    "@lexical/extension": "0.50.0",
     "@lexical/utils": "0.50.0",
     lexical: "0.50.0",
-    react: "^19.2.3",
-    "react-dom": "^19.2.3",
   },
+};
+const demoPackageManifest = {
+  dependencies: { react: "^19.2.3", "react-dom": "^19.2.3" },
 };
 const compatibilityConfig = {
   unitVersions: LEXICAL_VERSIONS,
@@ -61,6 +60,7 @@ describe("Lexical compatibility configuration", () => {
         "0.50.0",
         undefined,
         lexicalPackageManifest,
+        demoPackageManifest,
       ),
     ).toEqual([
       {
@@ -86,8 +86,8 @@ describe("Lexical compatibility configuration", () => {
     ]);
   });
 
-  it("derives one current React version from aligned development dependencies", () => {
-    expect(getCurrentReactVersion(lexicalPackageManifest)).toBe("19.2.3");
+  it("derives one current React version from aligned demo dependencies", () => {
+    expect(getCurrentReactVersion(demoPackageManifest)).toBe("19.2.3");
   });
 
   it("restricts E2E React versions to configured lanes", () => {
@@ -95,49 +95,23 @@ describe("Lexical compatibility configuration", () => {
       assertE2EReactVersionAllowed(
         "19.2.3",
         compatibilityConfig,
-        lexicalPackageManifest,
+        demoPackageManifest,
       ),
     ).not.toThrow();
     expect(() =>
       assertE2EReactVersionAllowed(
         "18.3.1",
         compatibilityConfig,
-        lexicalPackageManifest,
+        demoPackageManifest,
       ),
     ).not.toThrow();
     expect(() =>
       assertE2EReactVersionAllowed(
         "17.0.2",
         compatibilityConfig,
-        lexicalPackageManifest,
+        demoPackageManifest,
       ),
     ).toThrow("19.2.3, 18.3.1");
-  });
-
-  it("accepts semantically equivalent React peer ranges", () => {
-    expect(
-      validateCompatibilityConfig(compatibilityConfig, "0.50.0", {
-        ...lexicalPackageManifest,
-        peerDependencies: {
-          ...lexicalPackageManifest.peerDependencies,
-          react: ">=18.0.0 <20.0.0",
-          "react-dom": ">=18.0.0 <20.0.0",
-        },
-      }),
-    ).toBe(compatibilityConfig);
-  });
-
-  it("rejects empty React peer ranges", () => {
-    expect(() =>
-      validateCompatibilityConfig(compatibilityConfig, "0.50.0", {
-        ...lexicalPackageManifest,
-        peerDependencies: {
-          ...lexicalPackageManifest.peerDependencies,
-          react: "",
-          "react-dom": "",
-        },
-      }),
-    ).toThrow("React peerDependencies must use a valid semver range");
   });
 
   it("rejects development versions that are not valid SemVer", () => {
@@ -147,7 +121,6 @@ describe("Lexical compatibility configuration", () => {
         devDependencies: {
           ...lexicalPackageManifest.devDependencies,
           "@lexical/clipboard": "0.50.00",
-          "@lexical/react": "0.50.00",
           "@lexical/utils": "0.50.00",
           lexical: "0.50.00",
         },
@@ -156,9 +129,9 @@ describe("Lexical compatibility configuration", () => {
 
     expect(() =>
       getCurrentReactVersion({
-        ...lexicalPackageManifest,
-        devDependencies: {
-          ...lexicalPackageManifest.devDependencies,
+        ...demoPackageManifest,
+        dependencies: {
+          ...demoPackageManifest.dependencies,
           react: "^019.2.3",
           "react-dom": "^019.2.3",
         },
@@ -191,6 +164,7 @@ describe("Lexical compatibility configuration", () => {
         "0.50.0",
         "0.48.1",
         lexicalPackageManifest,
+        demoPackageManifest,
       ),
     ).toEqual([
       {

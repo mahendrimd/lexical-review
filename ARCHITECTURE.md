@@ -119,17 +119,26 @@ is not yet implemented.
 
 ### Package and host boundaries
 
-The root entrypoint owns core nodes, document and session APIs, and review
-operations. It has no runtime imports of `react` or `@lexical/react`, so model
-and serialization code can run without loading React.
+The package exposes one framework-independent entrypoint, `lexical-review`,
+for nodes, document and session APIs, review operations, `ReviewExtension`, and
+direct input registration. It has no runtime React imports or `"use client"`
+directive. Importing the package is safe without DOM globals; operations that
+render DOM or consume browser events still need the corresponding environment.
+React hosts establish their client boundary in their own editor components.
 
-Browser integration lives in `lexical-review/client`. Its
-`registerReviewSession` API accepts a `LexicalEditor` directly;
-`ReviewSessionPlugin` connects that registration to React's effect lifecycle.
-Both are exported from the same client entrypoint, which imports `react` and
-`@lexical/react` at runtime even for direct registration callers. See the
-[package guide](packages/lexical-review/README.md#compatibility) for installation
-requirements.
+`ReviewExtension` bundles every review node with input registration and cleanup.
+It opens a configured review document after Lexical's initial-state extension
+runs, so initialization cannot overwrite the document. Its output provides the
+current session, document opening and session closing, and runtime registration
+options. Invalid document input preserves the active session; closing detaches
+input routing without changing the current editor state.
+
+`registerReviewSession` remains available for hosts that create and configure an
+editor directly. React hosts use Lexical's `LexicalExtensionComposer` and retrieve
+the same extension output as other frameworks. React dependencies belong to the
+demo, whose browser tests exercise host integration. Use one registration owner
+for each active session. See the [package guide](packages/lexical-review/README.md#core-loop)
+for lifecycle and installation requirements.
 
 Hosts own their application layout and review UI. The demo demonstrates
 capabilities rather than defining a required host workflow.

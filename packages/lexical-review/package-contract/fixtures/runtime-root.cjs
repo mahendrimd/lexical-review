@@ -47,4 +47,28 @@ const opened = root.openReviewSession(editor, {
 assert.equal(opened.status, "valid");
 assert.equal(opened.value.exportDocument().status, "valid");
 
-console.log("root entrypoint resolved with its CommonJS core runtime exports");
+assert.equal(root.ReviewExtension.name, "lexical-review/Review");
+assert.equal(typeof root.registerReviewSession, "function");
+assert.equal(typeof root.INSERT_REVIEW_FRAGMENT_COMMAND, "object");
+assert.equal(typeof root.RESOLVE_REVIEW_PROPOSALS_COMMAND, "object");
+assert.equal(typeof globalThis.document, "undefined");
+assert.equal(typeof globalThis.window, "undefined");
+const {
+  buildEditorFromExtensions,
+  getExtensionDependencyFromEditor,
+} = require("@lexical/extension");
+const extensionEditor = buildEditorFromExtensions(root.ReviewExtension);
+try {
+  const review = getExtensionDependencyFromEditor(
+    extensionEditor,
+    root.ReviewExtension,
+  ).output;
+  assert.equal(review.session.value, null);
+  assert.equal(review.openDocument({ root: {} }).status, "invalid");
+} finally {
+  extensionEditor.dispose();
+}
+
+console.log(
+  "CommonJS package imports and extension lifecycle passed without React or DOM globals",
+);

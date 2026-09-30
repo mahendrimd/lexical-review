@@ -7,8 +7,11 @@ import {
   ReviewDeletionNode,
   ReviewInsertionNode,
   type ValidationResult,
+  ReviewExtension,
+  registerReviewSession,
+  type ReviewSession,
 } from "lexical-review";
-import { createEditor } from "lexical";
+import { configExtension, createEditor } from "lexical";
 
 const nodeClass: typeof ReviewInsertionNode = ReviewInsertionNode;
 
@@ -66,3 +69,17 @@ editor.update(() => {
   void $setReviewFormatting({ bold: true, underline: true });
   void $inspectReviewProposal("pending-format");
 });
+
+const extension = configExtension(ReviewExtension, {
+  initialDocument: { root: {} },
+  options: {
+    copyProjection: "accepted-state",
+    onOutcome: (outcome) => void outcome.status,
+  },
+});
+const register: (
+  editor: import("lexical").LexicalEditor,
+  session: ReviewSession,
+) => () => void = registerReviewSession;
+void extension;
+void register;

@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__insertionFixture !== undefined);
 });
 
-for (const route of ["root", "client"] as const) {
+for (const route of ["direct", "command"] as const) {
   test(`${route} insertion retains identity after native typing, navigation, and correction`, async ({
     page,
   }) => {
@@ -51,7 +51,7 @@ for (const action of ["accept", "reject", "remove"] as const) {
   }) => {
     await page.evaluate((action) => {
       window.__insertionFixture!.select(0, 1);
-      window.__insertionFixture!.insert("X", "root");
+      window.__insertionFixture!.insert("X", "direct");
       window.__insertionFixture!.settle(action);
     }, action);
     await expect(page.getByTestId("insertion-editor")).toHaveText(
@@ -66,7 +66,7 @@ for (const action of ["accept", "reject", "remove"] as const) {
 test("a refused ambiguous edit adds no undo step", async ({ page }) => {
   await page.evaluate(() => {
     window.__insertionFixture!.select(0, 1);
-    window.__insertionFixture!.insert("X", "root");
+    window.__insertionFixture!.insert("X", "direct");
     window.__insertionFixture!.remove(2, 0, 1);
     window.__insertionFixture!.ambiguous();
   });
@@ -74,7 +74,7 @@ test("a refused ambiguous edit adds no undo step", async ({ page }) => {
     window.__insertionFixture!.snapshot(),
   );
   await page.evaluate(() =>
-    window.__insertionFixture!.insert("refused", "client"),
+    window.__insertionFixture!.insert("refused", "command"),
   );
   expect(
     await page.evaluate(() => window.__insertionFixture!.snapshot()),

@@ -52,6 +52,9 @@ importers:
 
   packages/demo:
     dependencies:
+      '@lexical/extension':
+        specifier: 0.52.0
+        version: 0.52.0(typescript@6.0.3)
       '@lexical/react':
         specifier: 0.52.0
         version: 0.52.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(typescript@6.0.3)(yjs@13.6.20)
@@ -89,27 +92,15 @@ importers:
       '@lexical/clipboard':
         specifier: 0.52.0
         version: 0.52.0(typescript@6.0.3)
-      '@lexical/react':
+      '@lexical/extension':
         specifier: 0.52.0
-        version: 0.52.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(typescript@6.0.3)(yjs@13.6.20)
+        version: 0.52.0(typescript@6.0.3)
       '@lexical/utils':
         specifier: 0.52.0
         version: 0.52.0(typescript@6.0.3)
-      '@types/react':
-        specifier: ^19.2.7
-        version: 19.2.7
-      '@types/react-dom':
-        specifier: ^19.2.3
-        version: 19.2.3(@types/react@19.2.7)
       lexical:
         specifier: 0.52.0
         version: 0.52.0(typescript@6.0.3)
-      react:
-        specifier: ^19.2.3
-        version: 19.2.3
-      react-dom:
-        specifier: ^19.2.3
-        version: 19.2.3(react@19.2.3)
       rolldown:
         specifier: ^1.2.5
         version: 1.2.5

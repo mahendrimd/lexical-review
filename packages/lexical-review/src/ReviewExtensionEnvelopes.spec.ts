@@ -18,8 +18,8 @@ import {
   ReviewFragmentNode,
   ReviewInsertionNode,
   validateReviewDocument,
+  registerReviewSession,
 } from "./index";
-import { registerReviewSession } from "./client";
 import {
   boundaryNode,
   formattingNode,

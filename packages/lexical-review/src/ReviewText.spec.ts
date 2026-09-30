@@ -18,8 +18,8 @@ import {
   ReviewInsertionNode,
   ReviewDeletionNode,
   type ReviewIntentOutcome,
+  registerReviewSession,
 } from "./index";
-import { registerReviewSession } from "./client";
 import {
   paragraph,
   reviewDocument,
@@ -69,7 +69,7 @@ function selectionSnapshot() {
     : null;
 }
 
-it.each(["root", "client"] as const)(
+it.each(["direct", "command"] as const)(
   "authors, navigates, corrects and reopens the same identity through %s",
   async (route) => {
     const { editor, session } = setup();
@@ -82,7 +82,7 @@ it.each(["root", "client"] as const)(
     const insert = (value: string) =>
       editor.update(
         () => {
-          if (route === "root")
+          if (route === "direct")
             outcomes.push(
               $insertReviewText(value, { proposalIdFactory: factory }),
             );
@@ -206,7 +206,7 @@ it("refuses identity factory failures without changing state or selection", () =
   expect(editor.getEditorState().read(selectionSnapshot)).toEqual(selection);
 });
 
-it.each(["root", "client"] as const)(
+it.each(["direct", "command"] as const)(
   "rolls back an unexpected mutation failure on the %s route",
   (route) => {
     const { editor, session, errors } = setup();
@@ -227,7 +227,7 @@ it.each(["root", "client"] as const)(
     try {
       editor.update(
         () => {
-          if (route === "root") $insertReviewText("X");
+          if (route === "direct") $insertReviewText("X");
           else editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X");
         },
         { discrete: true },

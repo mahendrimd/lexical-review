@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__formattingFixture !== undefined);
 });
 
-for (const route of ["root", "client", "keyboard"] as const) {
+for (const route of ["direct", "command", "keyboard"] as const) {
   test(`${route} formatting retains selection and identity through correction and resolution`, async ({
     page,
   }) => {
@@ -88,7 +88,7 @@ test("native typing cannot mutate a pending formatting target", async ({
 }) => {
   await page.evaluate(() => {
     window.__formattingFixture!.select(0, 0, 5);
-    window.__formattingFixture!.format("bold", "root");
+    window.__formattingFixture!.format("bold", "direct");
     window.__formattingFixture!.select(0, 2);
   });
   const before = await page.evaluate(() =>

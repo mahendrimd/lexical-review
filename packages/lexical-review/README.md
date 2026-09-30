@@ -5,8 +5,8 @@ Track-changes review mode for [Lexical](https://lexical.dev/). Pending proposals
 [Try the live demo](https://mahendrimd.github.io/lexical-review/) · [View the npm package](https://www.npmjs.com/package/lexical-review) · [Report an issue](https://github.com/mahendrimd/lexical-review/issues)
 
 This guide walks through installation, editor integration, and API usage.
-Start with [installation](#installation), choose an [entrypoint](#entrypoints),
-then follow the [core loop](#core-loop) to open and register a session.
+Start with [installation](#installation), then follow the [core loop](#core-loop)
+to open a session through the extension.
 
 For editing rules and resolution effects, see the
 [proposal behavior contract](https://github.com/mahendrimd/lexical-review/blob/main/docs/proposal-behavior.md).
@@ -18,105 +18,161 @@ For implementation responsibilities and state ownership, see the
 ```bash
 npm install lexical-review \
   'lexical@>=0.47.0 <0.53.0' \
-  '@lexical/react@>=0.47.0 <0.53.0' \
   '@lexical/clipboard@>=0.47.0 <0.53.0' \
-  '@lexical/utils@>=0.47.0 <0.53.0' \
-  react react-dom
+  '@lexical/extension@>=0.47.0 <0.53.0' \
+  '@lexical/utils@>=0.47.0 <0.53.0'
 ```
 
 ## Compatibility
 
 The package declares Lexical peer compatibility `>=0.47.0 <0.53.0`.
-`lexical`, `@lexical/react`, `@lexical/clipboard`, and `@lexical/utils` must
+`lexical`, `@lexical/clipboard`, `@lexical/extension`, and `@lexical/utils` must
 be installed at the same version within that range.
 
-The package declares React peer compatibility for React 18 and React 19, and
-`react` and `react-dom` must use the same version. All declared peers are
-required at installation, including the React peers for consumers using only
-the root entrypoint.
+React is not a package dependency or peer requirement. React hosts install
+`@lexical/react` at the same version as `lexical`, plus matching `react` and
+`react-dom` versions supported by that host integration. The demo browser
+tests exercise React 18 and React 19.
 
 CI exercises the supported Lexical minors and browser boundary scenarios in
 Chromium, Firefox, and Playwright WebKit. Playwright WebKit results do not
 certify native Safari or iOS Safari.
 
-## Entrypoints
+## Package API
 
-| Entrypoint              | Purpose                                                      | Example exports                                |
-| ----------------------- | ------------------------------------------------------------ | ---------------------------------------------- |
-| `lexical-review`        | Core nodes, document and session APIs, and review operations | `ReviewInsertionNode`, `openReviewSession`     |
-| `lexical-review/client` | Browser editor registration and React integration            | `registerReviewSession`, `ReviewSessionPlugin` |
+Import nodes, document and session APIs, review operations, `ReviewExtension`,
+and `registerReviewSession` from `lexical-review`.
 
-The root entrypoint has no runtime imports of `react` or `@lexical/react` and
-is suitable for server-side model and serialization code. DOM rendering and
-editor registration require a client environment.
+The package has no runtime React imports or `"use client"` directive and can be
+imported on the server without DOM globals. Rendering and browser input still
+require a DOM environment when those operations run. React hosts declare their
+client boundary in their own editor component.
 
-For browser integration, call `registerReviewSession` with a `LexicalEditor`
-from plain JavaScript, Vue, Svelte, or another framework. React hosts can use
-`ReviewSessionPlugin`, which manages registration and cleanup through an
-effect. Both exports share the client entrypoint, whose runtime imports include
-`react` and `@lexical/react` even when calling `registerReviewSession` directly.
+`ReviewExtension` works with React or any other framework. It includes every
+review node and manages input registration and cleanup.
 
 ## Core loop
 
-Open a validated native v3 review document against an editor, register the session, then inspect or resolve proposals by ID:
+Add the extension to your editor, open a validated native v3 review document,
+then inspect or resolve proposals by ID:
 
 ```ts
+import {
+  buildEditorFromExtensions,
+  getExtensionDependencyFromEditor,
+} from "@lexical/extension";
+import { configExtension } from "lexical";
 import {
   $inspectReviewProposal,
   $resolveReviewProposal,
   $resolveReviewProposals,
-  openReviewSession,
+  ReviewExtension,
 } from "lexical-review";
-import { registerReviewSession } from "lexical-review/client";
 
-const session = openReviewSession(editor, initialDocument);
-if (session.status !== "valid") {
-  throw new Error(session.issues[0]?.message ?? "Invalid review document.");
-}
-const cleanup = registerReviewSession(editor, session.value, { onOutcome });
-// ... later: cleanup();
+const editor = buildEditorFromExtensions(
+  configExtension(ReviewExtension, {
+    initialDocument,
+    options: { onOutcome },
+  }),
+);
+editor.setRootElement(element);
+const review = getExtensionDependencyFromEditor(editor, ReviewExtension).output;
 
 editor.getEditorState().read(() => $inspectReviewProposal(proposalId));
-// Returns a kind-tagged proposal: insertion, deletion, replacement,
-// formatting, structure, or fragment.
-
 editor.update(() => $resolveReviewProposal(proposalId, "accept"));
-// Alternatively: "reject" or "remove", each inside editor.update().
-editor.update(() => $resolveReviewProposals(ids, "accept"));
-// Batch variant: validates every ID before mutation, resolves each once.
+editor.update(() => $resolveReviewProposals(ids, "reject"));
+
+const saved = review.session.value?.exportDocument();
+// ... later: editor.dispose();
 ```
 
-Opening validates before installing any state. The session reads and updates
-the live `EditorState`; it does not keep a parallel authoritative snapshot.
-Serialization preserves current pending proposals only, with no resolution
-history.
+`initialDocument` defaults to `null`, leaving review input routing inactive.
+To open a document later, call `review.openDocument(input)` after editor creation.
+It returns the same validation result as `openReviewSession`; invalid or
+unsupported input preserves the existing document and session. A configured
+initial document opens after Lexical initializes its editor state; invalid or
+unsupported initial input throws during editor creation.
 
-Register the session with the same editor that opened it, and call the returned
-cleanup function when detaching it. In React, use
-`<ReviewSessionPlugin session={session.value} />` inside that editor's
-`LexicalComposer` to manage this lifecycle.
+The session reads the live `EditorState`; it does not keep a parallel
+authoritative snapshot. Saving preserves current pending proposals only, with
+no resolution history. `review.closeSession()` removes review input handlers
+without changing the current document. Opening another valid document activates
+routing again. Editor disposal removes handlers and clears the session signal.
 
-Through a registered session, proposal resolution is also available as
+### React
+
+Use a stable root extension with `LexicalExtensionComposer`. Review nodes and
+handlers are supplied by `ReviewExtension`; a React review plugin is unnecessary.
+
+```tsx
+import { LexicalExtensionComposer } from "@lexical/react/LexicalExtensionComposer";
+import { ContentEditable } from "@lexical/react/LexicalContentEditable";
+import { configExtension, defineExtension } from "lexical";
+import { ReviewExtension } from "lexical-review";
+
+const extension = defineExtension({
+  name: "my-review-editor",
+  dependencies: [configExtension(ReviewExtension, { initialDocument })],
+});
+
+function Editor() {
+  return (
+    <LexicalExtensionComposer extension={extension} contentEditable={null}>
+      <ContentEditable />
+      <ReviewToolbar />
+    </LexicalExtensionComposer>
+  );
+}
+```
+
+Children can retrieve the output with `getExtensionDependencyFromEditor(editor,
+ReviewExtension).output`, using the editor from `useLexicalComposerContext`.
+Replace `review.options.value` to update callbacks, clipboard projection, or the
+proposal ID factory without reopening the document. Updates replace the full
+options object and renew registration, just like direct cleanup and registration;
+keep callback values stable and avoid changing options during composition.
+
+### Direct registration
+
+Hosts using `createEditor` can still register nodes themselves and call
+`openReviewSession(editor, input)`, then
+`registerReviewSession(editor, session.value, options)`.
+Register with the same editor that opened the session and call the returned
+cleanup when detaching it. Use either direct registration or the extension for
+an active session so commands are registered once.
+
+Through either integration, proposal resolution is available as
 `RESOLVE_REVIEW_PROPOSALS_COMMAND` with payload `{ ids, action }`.
+Unexpected implementation errors propagate to Lexical's update error handling
+and rollback; do not swallow them inside the update callback.
 
-Unexpected implementation errors propagate to Lexical's update error handling and rollback; do not swallow them inside the update callback.
+### Migrating from v2
+
+V3 uses proposal-bearing nodes and native v3 review documents in place of v2's
+text-node review representation. Replace v2 `ReviewTextPlugin` / `registerReviewText` integration with
+`ReviewExtension` and `LexicalExtensionComposer`, and follow the native document
+and proposal APIs in this guide. There is no automatic v2 document conversion.
+All v3 APIs are exported from `lexical-review`; the former client subpath and
+review plugin are removed. Use the extension output to open documents and update
+runtime options.
 
 ### Registration options
 
-The default calls need no options: proposal IDs are generated, deletion is by character, and copy exports the all-accepted projection. Hosts that need more pass them to the registration:
+The default calls need no options: proposal IDs are generated, deletion is by character, and copy exports the all-accepted projection. Hosts that need more configure the extension options or pass them to direct registration:
 
 ```ts
-registerReviewSession(editor, session.value, {
+review.options.value = {
   copyProjection: "accepted-state", // or "all-accepted" (default)
   onOutcome, // a claimed command may still report `refused`; plus onInsertionOutcome / onDeletionOutcome
-});
+};
 ```
 
-A custom `proposalIdFactory` is only needed when an external scheme owns identity, such as server-assigned IDs or deterministic tests. In that case, pass the same factory to the registration and to each direct call, so typed and programmatic proposals share one scheme:
+A custom `proposalIdFactory` is only needed when an external scheme owns identity, such as server-assigned IDs or deterministic tests. In that case, pass the same factory to the extension options (or direct registration) and to each direct call, so typed and programmatic proposals share one scheme:
 
 ```ts
 // Custom-scheme hosts only:
 const proposalIdFactory = () => crypto.randomUUID();
+review.options.value = { ...review.options.value, proposalIdFactory };
 editor.update(() => {
   $insertReviewText("new text", { proposalIdFactory });
 });
@@ -151,7 +207,7 @@ $insertReviewFragment([
 ]);
 ```
 
-`INSERT_REVIEW_FRAGMENT_COMMAND` from `lexical-review/client` accepts already-normalized fragment content.
+`INSERT_REVIEW_FRAGMENT_COMMAND` from `lexical-review` accepts already-normalized fragment content.
 
 ## Rendering contract
 

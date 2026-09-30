@@ -139,3 +139,16 @@ export {
   type ReviewProposalAttachment,
   type ReviewProposalSnapshot,
 } from "./ReviewReviewer";
+
+export {
+  ReviewExtension,
+  type ReviewExtensionConfig,
+  type ReviewExtensionOutput,
+} from "./ReviewExtension";
+export {
+  registerReviewSession,
+  INSERT_REVIEW_FRAGMENT_COMMAND,
+  RESOLVE_REVIEW_PROPOSALS_COMMAND,
+  type ReviewSessionRegistrationOptions,
+  type ReviewResolutionRoutePayload,
+} from "./registerReviewSession";

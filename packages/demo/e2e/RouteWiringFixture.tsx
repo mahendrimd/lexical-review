@@ -24,11 +24,9 @@ import {
   ReviewFormattingNode,
   ReviewInsertionNode,
   type ReviewIntentOutcome,
-} from "lexical-review";
-import {
   registerReviewSession,
   RESOLVE_REVIEW_PROPOSALS_COMMAND,
-} from "lexical-review/client";
+} from "lexical-review";
 
 export function RouteWiringFixture() {
   const ref = useRef<HTMLDivElement>(null);

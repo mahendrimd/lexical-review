@@ -1,4 +1,13 @@
-import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import assert from "node:assert/strict";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,25 +19,15 @@ const packageContractDirectory = path.dirname(fileURLToPath(import.meta.url));
 const packageDirectory = path.resolve(packageContractDirectory, "..");
 const repositoryDirectory = path.resolve(packageDirectory, "../..");
 const fixtureDirectory = path.join(packageContractDirectory, "fixtures");
+const typeFixtures = ["root.ts", "cjs-root.cts"];
+const runtimeFixtures = ["runtime-root.mjs", "runtime-root.cjs"];
 
-export const coreDependencies = ["@lexical", "lexical"];
-export const clientDependencies = [
-  ...coreDependencies,
-  "@types",
-  "react",
-  "react-dom",
-];
-
-export async function linkDependencies(
-  consumerDirectory,
-  dependencies,
-  sourceNodeModules = path.join(packageDirectory, "node_modules"),
-) {
+async function linkDependencies(consumerDirectory) {
   const nodeModulesDirectory = path.join(consumerDirectory, "node_modules");
   await mkdir(nodeModulesDirectory, { recursive: true });
 
-  for (const dependency of dependencies) {
-    const source = path.join(sourceNodeModules, dependency);
+  for (const dependency of ["@lexical", "lexical"]) {
+    const source = path.join(packageDirectory, "node_modules", dependency);
     const target = path.join(nodeModulesDirectory, dependency);
 
     await mkdir(path.dirname(target), { recursive: true });
@@ -36,13 +35,8 @@ export async function linkDependencies(
   }
 }
 
-export async function createConsumer(
-  temporaryDirectory,
-  name,
-  stagedPackageDirectory,
-  dependencies,
-) {
-  const consumerDirectory = path.join(temporaryDirectory, name);
+async function createConsumer(temporaryDirectory) {
+  const consumerDirectory = path.join(temporaryDirectory, "consumer");
   const packageTarget = path.join(
     consumerDirectory,
     "node_modules",
@@ -54,7 +48,7 @@ export async function createConsumer(
     path.join(consumerDirectory, "package.json"),
     JSON.stringify(
       {
-        name: `lexical-review-${name}-consumer`,
+        name: "lexical-review-package-consumer",
         private: true,
         type: "module",
       },
@@ -62,18 +56,22 @@ export async function createConsumer(
       2,
     ) + "\n",
   );
-  await cp(stagedPackageDirectory, packageTarget, { recursive: true });
-  await linkDependencies(consumerDirectory, dependencies);
+  await cp(
+    path.join(packageDirectory, "package.json"),
+    path.join(packageTarget, "package.json"),
+  );
+  await cp(
+    path.join(packageDirectory, "dist"),
+    path.join(packageTarget, "dist"),
+    { recursive: true },
+  );
+  await linkDependencies(consumerDirectory);
 
   return consumerDirectory;
 }
 
-export async function copyFixtures(
-  consumerDirectory,
-  fixtures,
-  typecheckFiles,
-) {
-  for (const fixture of fixtures) {
+async function copyFixtures(consumerDirectory) {
+  for (const fixture of [...typeFixtures, ...runtimeFixtures]) {
     await cp(
       path.join(fixtureDirectory, fixture),
       path.join(consumerDirectory, fixture),
@@ -92,7 +90,7 @@ export async function copyFixtures(
           strict: true,
           target: "ES2022",
         },
-        files: typecheckFiles,
+        files: typeFixtures,
       },
       null,
       2,
@@ -100,7 +98,7 @@ export async function copyFixtures(
   );
 }
 
-export async function runTypecheck(consumerDirectory) {
+async function runTypecheck(consumerDirectory) {
   const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
   try {
@@ -128,7 +126,7 @@ export async function runTypecheck(consumerDirectory) {
   }
 }
 
-export async function runRuntimeFixture(consumerDirectory, fixture) {
+async function runRuntimeFixture(consumerDirectory, fixture) {
   const { stdout } = await execFileAsync(
     process.execPath,
     [path.join(consumerDirectory, fixture)],
@@ -137,46 +135,31 @@ export async function runRuntimeFixture(consumerDirectory, fixture) {
   process.stdout.write(stdout);
 }
 
-export async function verifyStagedPackage(stagedPackageDirectory) {
+export async function verifyConsumer(consumerDirectory) {
+  const manifest = JSON.parse(
+    await readFile(
+      path.join(consumerDirectory, "node_modules/lexical-review/package.json"),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(Object.keys(manifest.exports), ["."]);
+  for (const name of ["react", "react-dom", "@lexical/react"]) {
+    assert.equal(manifest.dependencies?.[name], undefined);
+    assert.equal(manifest.peerDependencies?.[name], undefined);
+  }
+  await copyFixtures(consumerDirectory);
+  await runTypecheck(consumerDirectory);
+  for (const fixture of runtimeFixtures)
+    await runRuntimeFixture(consumerDirectory, fixture);
+}
+
+export async function verifyPackage() {
   const temporaryDirectory = await mkdtemp(
     path.join(os.tmpdir(), "lexical-review-package-contract-"),
   );
-
   try {
-    const coreConsumer = await createConsumer(
-      temporaryDirectory,
-      "core",
-      stagedPackageDirectory,
-      coreDependencies,
-    );
-    const clientConsumer = await createConsumer(
-      temporaryDirectory,
-      "client",
-      stagedPackageDirectory,
-      clientDependencies,
-    );
-
-    await copyFixtures(
-      coreConsumer,
-      ["root.ts", "cjs-root.cts", "runtime-root.mjs", "runtime-root.cjs"],
-      ["root.ts", "cjs-root.cts"],
-    );
-    await copyFixtures(
-      clientConsumer,
-      [
-        "client.ts",
-        "cjs-client.cts",
-        "runtime-client.mjs",
-        "runtime-client.cjs",
-      ],
-      ["client.ts", "cjs-client.cts"],
-    );
-    await runTypecheck(coreConsumer);
-    await runTypecheck(clientConsumer);
-    await runRuntimeFixture(coreConsumer, "runtime-root.mjs");
-    await runRuntimeFixture(coreConsumer, "runtime-root.cjs");
-    await runRuntimeFixture(clientConsumer, "runtime-client.mjs");
-    await runRuntimeFixture(clientConsumer, "runtime-client.cjs");
+    const consumer = await createConsumer(temporaryDirectory);
+    await verifyConsumer(consumer);
     console.log("package contract passed");
   } finally {
     await rm(temporaryDirectory, { force: true, recursive: true });

@@ -5,11 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  copyFixtures,
-  runRuntimeFixture,
-  runTypecheck,
-} from "../../packages/lexical-review/package-contract/consumer.mjs";
+import { verifyConsumer } from "../../packages/lexical-review/package-contract/consumer.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryDirectory = path.resolve(scriptDirectory, "../..");
@@ -24,9 +20,6 @@ const requiredEntries = [
   "dist/index.js",
   "dist/index.mjs",
   "dist/index.d.ts",
-  "dist/client.js",
-  "dist/client.mjs",
-  "dist/client.d.ts",
 ];
 const allowedTopLevelFiles = new Set([
   "package.json",
@@ -227,10 +220,6 @@ async function checkTarballConsumer(tarballPath) {
       if (peers.length > 0) {
         runPnpm(["add", ...peers], consumerDirectory);
       }
-      runPnpm(
-        ["add", "--save-dev", "@types/react", "@types/react-dom"],
-        consumerDirectory,
-      );
     } catch (error) {
       fail(
         "consumer",
@@ -238,25 +227,7 @@ async function checkTarballConsumer(tarballPath) {
       );
     }
     try {
-      await copyFixtures(
-        consumerDirectory,
-        [
-          "root.ts",
-          "cjs-root.cts",
-          "runtime-root.mjs",
-          "runtime-root.cjs",
-          "client.ts",
-          "cjs-client.cts",
-          "runtime-client.mjs",
-          "runtime-client.cjs",
-        ],
-        ["root.ts", "cjs-root.cts", "client.ts", "cjs-client.cts"],
-      );
-      await runTypecheck(consumerDirectory);
-      await runRuntimeFixture(consumerDirectory, "runtime-root.mjs");
-      await runRuntimeFixture(consumerDirectory, "runtime-root.cjs");
-      await runRuntimeFixture(consumerDirectory, "runtime-client.mjs");
-      await runRuntimeFixture(consumerDirectory, "runtime-client.cjs");
+      await verifyConsumer(consumerDirectory);
     } catch (error) {
       fail(
         "consumer",

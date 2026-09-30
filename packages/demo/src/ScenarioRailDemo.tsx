@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getExtensionDependencyFromEditor } from "@lexical/extension";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import {
@@ -21,14 +22,10 @@ import {
   $insertReviewText,
   $isReviewInsertionNode,
   $replaceReviewText,
-  openReviewSession,
   type ReviewProposalIdFactory,
-  type ReviewSession,
-} from "lexical-review";
-import {
-  ReviewSessionPlugin,
+  ReviewExtension,
   type ReviewIntentOutcome,
-} from "lexical-review/client";
+} from "lexical-review";
 import {
   EVIDENCE_STATUS_TEXT,
   useProposalEvidence,
@@ -221,7 +218,10 @@ export default function ScenarioRailDemo({
   onEditorReady?: (editor: LexicalEditor) => void;
 }) {
   const [editor] = useLexicalComposerContext();
-  const [session, setSession] = useState<ReviewSession | null>(null);
+  const review = getExtensionDependencyFromEditor(
+    editor,
+    ReviewExtension,
+  ).output;
   const [scenario, setScenario] = useState<ScenarioId>("r1");
   const [outcome, setOutcome] = useState<ReviewIntentOutcome | null>(null);
   const [outcomeCount, setOutcomeCount] = useState(0);
@@ -267,7 +267,10 @@ export default function ScenarioRailDemo({
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    review.options.value = {
+      proposalIdFactory: factory,
+      onOutcome: handleOutcome,
+    };
     editor.update(
       () => {
         setPlainText("AB", 1, 1);
@@ -275,7 +278,7 @@ export default function ScenarioRailDemo({
       { discrete: true },
     );
     const input = editor.getEditorState().toJSON();
-    const opened = openReviewSession(editor, {
+    const opened = review.openDocument({
       root: {
         ...input.root,
         $: { "lexical-review": { version: 3, extensions: [] } },
@@ -283,11 +286,8 @@ export default function ScenarioRailDemo({
     });
     if (opened.status !== "valid")
       throw new Error("Invalid scenario-rail demo");
-    if (!cancelled) setSession(opened.value);
-    return () => {
-      cancelled = true;
-    };
-  }, [editor]);
+    return () => review.closeSession();
+  }, [editor, review, factory, handleOutcome]);
 
   useEffect(() => {
     onEditorReady?.(editor);
@@ -915,13 +915,6 @@ export default function ScenarioRailDemo({
           )}
         </div>
       </main>
-      {session !== null && (
-        <ReviewSessionPlugin
-          session={session}
-          proposalIdFactory={factory}
-          onOutcome={handleOutcome}
-        />
-      )}
     </div>
   );
 }

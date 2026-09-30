@@ -10,10 +10,6 @@ export default {
   resolve: {
     alias: [
       {
-        find: "lexical-review/client",
-        replacement: `${lexicalReviewSource}/client.ts`,
-      },
-      {
         find: "lexical-review",
         replacement: `${lexicalReviewSource}/index.ts`,
       },

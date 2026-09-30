@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@lexical/extension": "0.52.0",
     "@lexical/react": "0.52.0",
     "lexical": "0.52.0",
     "lexical-review": "workspace:3.0.0",
