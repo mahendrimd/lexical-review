@@ -797,6 +797,10 @@ function runCompatibility(version) {
     verifyInstalledLexicalGraph(version, environment);
     verifyInstalledReactGraph(currentReactVersion, environment);
     runPnpm(["--filter", "lexical-review", "build"], environment);
+    runPnpm(
+      ["exec", "node", "packages/lexical-review/package-contract/verify.mjs"],
+      environment,
+    );
     runPnpm(["test", "--run"], environment);
 
     if (isCurrentVersion) {
