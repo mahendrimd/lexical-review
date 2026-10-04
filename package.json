@@ -8,7 +8,7 @@
   "description": "A repo to lexical-review",
   "packageManager": "pnpm@11.28.2",
   "engines": {
-    "node": "^22.13.0 || >=24",
+    "node": "^22.13.0 || ^24.0.0 || >=26.0.0",
     "pnpm": ">=11 <12"
   },
   "main": "dist/src/index.js",
@@ -52,6 +52,7 @@
     "semver": "^7.8.5",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0",
-    "vitest": "^4.1.11"
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
   }
 }

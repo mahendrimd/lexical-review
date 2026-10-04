@@ -42,7 +42,7 @@ review interactions before integrating them into your application.
 
 ## Development
 
-The library lives in `packages/lexical-review`, the demo lives in `packages/demo`, and focused tests are co-located with the library source. The repository requires Node `^22.13.0` or `>=24` and pnpm `11`.
+The library lives in `packages/lexical-review`, the demo lives in `packages/demo`, and focused tests are co-located with the library source. The repository requires Node `^22.13.0`, `^24.0.0`, or `>=26.0.0` and pnpm `11`.
 
 ```bash
 pnpm install
