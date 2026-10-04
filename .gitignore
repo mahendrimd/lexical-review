@@ -36,6 +36,7 @@ yarn-error.log*
 
 .nx/cache
 .nx/workspace-data
+.nx/migrate-runs
 
 # Playwright artifacts
 playwright-report/
