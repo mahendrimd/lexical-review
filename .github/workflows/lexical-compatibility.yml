@@ -31,7 +31,7 @@ permissions:
 jobs:
   resolve:
     name: Resolve compatibility matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       unitMatrix: ${{ steps.resolve.outputs.unitMatrix }}
       e2eMatrix: ${{ steps.resolve.outputs.e2eMatrix }}
@@ -58,7 +58,7 @@ jobs:
   compatibility:
     name: Lexical ${{ matrix.version }}
     needs: resolve
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -82,7 +82,7 @@ jobs:
   e2e:
     name: E2E Lexical ${{ matrix.lexicalVersion }} React ${{ matrix.reactVersion }} (${{ matrix.project }})
     needs: resolve
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 25
     strategy:
       fail-fast: false

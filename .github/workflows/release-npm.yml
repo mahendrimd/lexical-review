@@ -29,7 +29,7 @@ jobs:
   verify:
     name: Verify release artifact
     if: github.event_name != 'release'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -67,7 +67,7 @@ jobs:
   publish:
     name: Publish verified release artifact
     if: github.event_name == 'release'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
