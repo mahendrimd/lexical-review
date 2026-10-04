@@ -27,7 +27,7 @@ import {
 } from "./index";
 import {
   registerReviewSession,
-  type ReviewIntentOutcome,
+  type ReviewRoutedOutcome,
 } from "./registerReviewSession";
 import {
   formattingNode,
@@ -81,7 +81,7 @@ function liveSelection() {
 function open(
   editor: LexicalEditor,
   input: unknown,
-  outcomes: ReviewIntentOutcome[] = [],
+  outcomes: ReviewRoutedOutcome[] = [],
   options: Parameters<typeof registerReviewSession>[2] = {},
 ) {
   const opened = openReviewSession(editor, input);
@@ -157,7 +157,7 @@ function deletion(id: string, value: string, format = 0) {
 describe("review clipboard projections", () => {
   it("copies accepted content identically in both modes without identity", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -176,6 +176,15 @@ describe("review clipboard projections", () => {
         value: { mode: "all-accepted", projectedLength: 2 },
       },
     ]);
+    const outcome = outcomes[0];
+    if (
+      outcome?.status !== "changed" ||
+      !outcome.value ||
+      !("projectedLength" in outcome.value)
+    )
+      throw new Error("Expected clipboard success payload.");
+    expect(outcome.value.projectedLength).toBe(2);
+    expect(outcome.value.mode).toBe("all-accepted");
     expect(store.get("text/plain")).toBe("AB");
     expect(store.get("text/html")).toBe("<p>AB</p>");
     unregister();
@@ -183,7 +192,7 @@ describe("review clipboard projections", () => {
 
   it("copies accepted content identically under the accepted-state mode", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -211,7 +220,7 @@ describe("review clipboard projections", () => {
 
   it("copies insertion content only in all-accepted mode", async () => {
     const editor = createClipboardEditor();
-    const acceptedOutcomes: ReviewIntentOutcome[] = [];
+    const acceptedOutcomes: ReviewRoutedOutcome[] = [];
     const openAccepted = open(
       editor,
       reviewDocument([paragraph([insertion("ins-a", "X")])]),
@@ -232,7 +241,7 @@ describe("review clipboard projections", () => {
     openAccepted.unregister();
 
     const editor2 = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor2,
       reviewDocument([paragraph([insertion("ins-a", "X")])]),
@@ -257,7 +266,7 @@ describe("review clipboard projections", () => {
 
   it("copies deletion content only in accepted-state mode", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([deletion("del-a", "O")])]),
@@ -277,7 +286,7 @@ describe("review clipboard projections", () => {
     unregister();
 
     const editor2 = createClipboardEditor();
-    const outcomes2: ReviewIntentOutcome[] = [];
+    const outcomes2: ReviewRoutedOutcome[] = [];
     const { unregister: unregister2 } = open(
       editor2,
       reviewDocument([paragraph([deletion("del-a", "O")])]),
@@ -302,7 +311,7 @@ describe("review clipboard projections", () => {
         paragraph([deletion("rep-a", "old"), insertion("rep-a", "new")]),
       ]);
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(editor, doc(), outcomes);
     // New side first in document order is index 1.
     await selectAcross(editor, 1, 0, 1, 3);
@@ -316,7 +325,7 @@ describe("review clipboard projections", () => {
     unregister();
 
     const editor2 = createClipboardEditor();
-    const outcomes2: ReviewIntentOutcome[] = [];
+    const outcomes2: ReviewRoutedOutcome[] = [];
     const { unregister: unregister2 } = open(editor2, doc(), outcomes2, {
       copyProjection: "accepted-state",
     });
@@ -333,7 +342,7 @@ describe("review clipboard projections", () => {
 
   it("copies formatting text while stripping proposal wrapping", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -361,7 +370,7 @@ describe("review clipboard projections", () => {
 
   it("copies mixed accepted and insertion content as one projection", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -382,7 +391,7 @@ describe("review clipboard projections", () => {
 
   it("refuses mixed-identity cut without touching the clipboard", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -418,7 +427,7 @@ describe("review clipboard projections", () => {
     const doc = () =>
       reviewDocument([paragraph([text("A")]), paragraph([text("B")])]);
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(editor, doc(), outcomes);
     await selectAcross(editor, 0, 0, 1, 1);
     const clipboard = mockClipboard();
@@ -433,7 +442,7 @@ describe("review clipboard projections", () => {
     unregister();
 
     const editor2 = createClipboardEditor();
-    const outcomes2: ReviewIntentOutcome[] = [];
+    const outcomes2: ReviewRoutedOutcome[] = [];
     const { unregister: unregister2 } = open(editor2, doc(), outcomes2);
     await selectAcross(editor2, 0, 0, 1, 1);
     const clipboard2 = mockClipboard();
@@ -448,7 +457,7 @@ describe("review clipboard projections", () => {
 
   it("reports empty-projection for collapsed selections without clipboard writes", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -480,7 +489,7 @@ describe("review clipboard projections", () => {
 
   it("refuses copy and cut without writable clipboard data", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -504,7 +513,7 @@ describe("review clipboard projections", () => {
 
   it("reports clipboard-write failure with state and selection preserved", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -531,7 +540,7 @@ describe("review clipboard projections", () => {
 
   it("admits a dirty clipboard when the follow-up deletion cannot apply", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -560,7 +569,7 @@ describe("review clipboard projections", () => {
 
   it("cuts accepted content and claims the gesture once across routes", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -596,7 +605,7 @@ describe("review clipboard projections", () => {
 
   it("cuts insertion content by correcting the proposal in place", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([insertion("ins-a", "XY")])]),
@@ -619,7 +628,7 @@ describe("review clipboard projections", () => {
 
   it("refuses cut over a formatting proposal without touching the clipboard", async () => {
     const editor = createClipboardEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([

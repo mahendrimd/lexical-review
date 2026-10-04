@@ -2,11 +2,12 @@
  * Public client coverage for #66: untrusted single-paragraph paste and
  * copy-style drop intake without trusting foreign review markup.
  *
- * Every route case dispatches through `registerReviewSession` against a real
+ * Route cases dispatch through `registerReviewSession` against a real
  * editor. No direct-semantic-only proof: route outcomes must equal the shared
  * semantics with one physical action claimed once. WER mapping and
  * conformance belong to `lexical-review-wer` (#74/#82); the only WER-adjacent
- * case here proves literal WER-looking bytes paste as literal text.
+ * case here proves literal WER-looking bytes paste as literal text. Direct
+ * public paste-run coverage additionally verifies custom-transport inputs.
  */
 import {
   $getRoot,
@@ -22,6 +23,7 @@ import {
   type LexicalNode,
 } from "lexical";
 import {
+  $applyPasteRuns,
   $insertReviewFragment,
   $listReviewProposals,
   $pasteReviewSelection,
@@ -35,12 +37,14 @@ import {
   ReviewFragmentNode,
   ReviewInsertionNode,
   type ReviewPasteOutcome,
+  type ReviewPasteRun,
 } from "./index";
 import {
   registerReviewSession,
-  type ReviewIntentOutcome,
+  type ReviewRoutedOutcome,
 } from "./registerReviewSession";
 import {
+  fragmentNode,
   paragraph,
   reviewDocument,
   reviewNode,
@@ -76,7 +80,7 @@ async function update(
 function open(
   editor: LexicalEditor,
   input: unknown,
-  outcomes: ReviewIntentOutcome[] = [],
+  outcomes: ReviewRoutedOutcome[] = [],
   options: Parameters<typeof registerReviewSession>[2] = {},
 ) {
   const opened = openReviewSession(editor, input);
@@ -117,9 +121,9 @@ function dropEvent(html: string, plain: string, dropEffect: string) {
     clientX: 0,
     clientY: 0,
     dataTransfer: {
+      dropEffect,
       getData: (type: string) => (type === "text/html" ? html : plain),
     },
-    dropEffect,
   } as unknown as DragEvent;
   return { event, preventDefault };
 }
@@ -306,12 +310,24 @@ describe("review paste normalization", () => {
 describe("review single-paragraph paste", () => {
   it("inserts plain text as one fresh insertion with proposal-side caret", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
-    open(editor, acceptedDoc("AB"), outcomes);
+    const outcomes: ReviewRoutedOutcome[] = [];
+    const insertionOutcomes: ReviewRoutedOutcome[] = [];
+    open(editor, acceptedDoc("AB"), outcomes, {
+      onInsertionOutcome: (outcome) => insertionOutcomes.push(outcome),
+    });
     await selectCaret(editor, 0, 1);
     const { event } = pasteEvent("", "x");
     expect(editor.dispatchCommand(PASTE_COMMAND, event)).toBe(true);
     expect(outcomes.at(-1)).toMatchObject({ status: "changed" });
+    const routed = outcomes.at(-1);
+    if (
+      routed?.status !== "changed" ||
+      !routed.value ||
+      !("source" in routed.value)
+    )
+      throw new Error("Expected paste normalization payload.");
+    expect(routed.value.source).toBe("text/plain");
+    expect(insertionOutcomes.at(-1)).toBe(routed);
     expect(allAcceptedOf(editor)).toEqual(["AxB"]);
     expect(proposalsOf(editor)).toHaveLength(1);
 
@@ -330,7 +346,7 @@ describe("review single-paragraph paste", () => {
 
   it("preserves supported inline formatting from single-paragraph html", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const { event } = pasteEvent(
@@ -351,7 +367,7 @@ describe("review single-paragraph paste", () => {
 
   it("falls back to plain text when rich data access throws", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const { event } = pasteEvent("<p>rich</p>", "plain", true);
@@ -362,7 +378,7 @@ describe("review single-paragraph paste", () => {
 
   it("sanitizes links and scripts while reporting loss", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 2);
     const { event } = pasteEvent(
@@ -385,7 +401,7 @@ describe("review single-paragraph paste", () => {
 
   it("pastes literal WER JSON as text with a fresh native identity", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const literal = '{"kind":"insertion","proposalId":"foreign"}';
@@ -400,7 +416,7 @@ describe("review single-paragraph paste", () => {
 
   it("creates one atomic replacement for a non-collapsed accepted range", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectAcross(editor, 0, 1, 0, 2);
     const { event } = pasteEvent("", "x");
@@ -418,7 +434,7 @@ describe("review single-paragraph paste", () => {
 
   it("corrects a wholly selected insertion under the same identity", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(
       editor,
       reviewDocument([
@@ -440,7 +456,7 @@ describe("review single-paragraph paste", () => {
 
   it("routes multiline paste to one atomic fragment instead of refusing (#67)", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const { event, preventDefault } = pasteEvent("", "x\ny");
@@ -453,7 +469,7 @@ describe("review single-paragraph paste", () => {
 
   it("routes nested single-text blocks through the fragment intake", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const { event } = pasteEvent("<div><p>x</p></div>", "");
@@ -465,7 +481,7 @@ describe("review single-paragraph paste", () => {
 
   it("keeps loose text beside one block as one insertion", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const { event } = pasteEvent("x<p>y</p>", "");
@@ -477,7 +493,7 @@ describe("review single-paragraph paste", () => {
 
   it("reports empty paste as unchanged without mutation", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const before = contentOf(editor);
@@ -490,7 +506,7 @@ describe("review single-paragraph paste", () => {
 
   it("refuses malformed paste events without mutation", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const before = contentOf(editor);
@@ -508,7 +524,7 @@ describe("review single-paragraph paste", () => {
 
   it("refuses mixed-identity selections without mutation", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(
       editor,
       reviewDocument([
@@ -530,7 +546,7 @@ describe("review single-paragraph paste", () => {
 
   it("corrects fragment-owned text under the same fragment identity", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     await update(editor, () => {
@@ -552,7 +568,7 @@ describe("review single-paragraph paste", () => {
   it("matches the direct semantic outcome for the same paste", async () => {
     const input = acceptedDoc("AB");
     const routed = createPasteEditor();
-    const routedOutcomes: ReviewIntentOutcome[] = [];
+    const routedOutcomes: ReviewRoutedOutcome[] = [];
     open(routed, input, routedOutcomes);
     await selectCaret(routed, 0, 1);
 
@@ -574,10 +590,150 @@ describe("review single-paragraph paste", () => {
   });
 });
 
+describe("public paste-run input validation", () => {
+  const normalization = {
+    source: "text/plain" as const,
+    flattened: [],
+    lost: [],
+    softBreakConverted: false,
+  };
+  const targets = [
+    { name: "accepted content", input: acceptedDoc("AB") },
+    {
+      name: "a pending insertion",
+      input: reviewDocument([
+        paragraph([reviewNode("review-insertion", "existing", [text("AB")])]),
+      ]),
+    },
+    {
+      name: "a pending fragment",
+      input: reviewDocument([
+        paragraph([fragmentNode("existing", [text("AB")], false)]),
+        paragraph([fragmentNode("existing", [text("CD")], true)]),
+      ]),
+    },
+  ];
+
+  it("applies supported runs and returns the supplied normalization report", async () => {
+    const editor = createPasteEditor();
+    const { unregister } = open(editor, acceptedDoc("AB"));
+    await selectCaret(editor, 0, 1);
+    let outcome: ReviewPasteOutcome | undefined;
+    await update(editor, () => {
+      outcome = $applyPasteRuns(
+        [
+          { text: "bold", format: 1 },
+          { text: "all", format: 15 },
+        ],
+        normalization,
+      );
+    });
+    expect(outcome).toEqual({ status: "changed", value: normalization });
+    expect(allAcceptedOf(editor)).toEqual(["AboldallB"]);
+    expect(
+      editor.read(() =>
+        $getRoot()
+          .getAllTextNodes()
+          .map((node) => node.getFormat()),
+      ),
+    ).toEqual([0, 1, 15, 0]);
+    unregister();
+  });
+
+  it("keeps empty runs unchanged without allocating identity", async () => {
+    const editor = createPasteEditor();
+    const { unregister } = open(editor, acceptedDoc("AB"));
+    await selectCaret(editor, 0, 1);
+    const before = editor.getEditorState().toJSON();
+    const proposalIdFactory = vi.fn(() => "unused");
+    let outcome: ReviewPasteOutcome | undefined;
+    await update(editor, () => {
+      outcome = $applyPasteRuns([], normalization, { proposalIdFactory });
+    });
+    expect(outcome).toEqual({ status: "unchanged", value: undefined });
+    expect(editor.getEditorState().toJSON()).toEqual(before);
+    expect(proposalIdFactory).not.toHaveBeenCalled();
+    unregister();
+  });
+
+  for (const target of targets) {
+    it.each([
+      { run: { text: "x", format: 16 }, code: "unsupported-formatting" },
+      { run: { text: "x", format: -1 }, code: "unsupported-formatting" },
+      { run: { text: "x", format: 1.5 }, code: "unsupported-formatting" },
+      { run: { text: "x\ny", format: 0 }, code: "unsupported-input" },
+      { run: { text: "x\ry", format: 0 }, code: "unsupported-input" },
+    ])(
+      `refuses invalid runs inside ${target.name} without mutation: $run`,
+      async ({ run, code }) => {
+        const editor = createPasteEditor();
+        const root = document.createElement("div");
+        editor.setRootElement(root);
+        const { unregister } = open(editor, target.input);
+        await selectCaret(editor, 0, 1);
+        const before = editor.getEditorState().toJSON();
+        const selectionBefore = editor.read(() => {
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection))
+            throw new Error("Expected selection.");
+          return selection.clone();
+        });
+        const projectionBefore = root.innerHTML;
+        const proposalIdFactory = vi.fn(() => "new-proposal");
+        let outcome: ReviewPasteOutcome | undefined;
+
+        await update(editor, () => {
+          // A valid first run must not be applied before the invalid second run.
+          outcome = $applyPasteRuns(
+            [{ text: "valid", format: 0 }, run],
+            normalization,
+            { proposalIdFactory },
+          );
+        });
+
+        expect(outcome).toMatchObject({ status: "refused", code });
+        expect(editor.getEditorState().toJSON()).toEqual(before);
+        expect(editor.read(() => $getSelection()?.is(selectionBefore))).toBe(
+          true,
+        );
+        expect(root.innerHTML).toBe(projectionBefore);
+        expect(proposalIdFactory).not.toHaveBeenCalled();
+        unregister();
+        editor.setRootElement(null);
+      },
+    );
+  }
+
+  it.each([
+    { name: "a non-array", runs: null },
+    { name: "a null run", runs: [null] },
+    { name: "non-text content", runs: [{ text: 1, format: 0 }] },
+    { name: "a sparse array", runs: Array(1) },
+  ])("refuses $name without mutation", async ({ runs }) => {
+    const editor = createPasteEditor();
+    const { unregister } = open(editor, acceptedDoc("AB"));
+    await selectCaret(editor, 0, 1);
+    const before = editor.getEditorState().toJSON();
+    let outcome: ReviewPasteOutcome | undefined;
+    await update(editor, () => {
+      outcome = $applyPasteRuns(
+        runs as unknown as readonly ReviewPasteRun[],
+        normalization,
+      );
+    });
+    expect(outcome).toMatchObject({
+      status: "refused",
+      code: "unsupported-input",
+    });
+    expect(editor.getEditorState().toJSON()).toEqual(before);
+    unregister();
+  });
+});
+
 describe("review copy-style drop", () => {
   it("applies copy-style drop at the live selection", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 2);
     const { event, preventDefault } = dropEvent("", "x", "copy");
@@ -588,26 +744,29 @@ describe("review copy-style drop", () => {
     expect(proposalsOf(editor)).toHaveLength(1);
   });
 
-  it("refuses move-style drop with zero mutation", async () => {
-    const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
-    open(editor, acceptedDoc("AB"), outcomes);
-    await selectCaret(editor, 0, 1);
-    const before = contentOf(editor);
-    const { event, preventDefault } = dropEvent("", "x", "move");
-    expect(editor.dispatchCommand(DROP_COMMAND, event)).toBe(true);
-    expect(preventDefault).toHaveBeenCalled();
-    expect(outcomes.at(-1)).toMatchObject({
-      status: "refused",
-      code: "unsupported-transfer",
-    });
-    expect(contentOf(editor)).toBe(before);
-    expect(proposalsOf(editor)).toHaveLength(0);
-  });
+  it.each(["move", "none", "link", "unknown"])(
+    "refuses %s drop with zero mutation",
+    async (effect) => {
+      const editor = createPasteEditor();
+      const outcomes: ReviewRoutedOutcome[] = [];
+      open(editor, acceptedDoc("AB"), outcomes);
+      await selectCaret(editor, 0, 1);
+      const before = contentOf(editor);
+      const { event, preventDefault } = dropEvent("", "x", effect);
+      expect(editor.dispatchCommand(DROP_COMMAND, event)).toBe(true);
+      expect(preventDefault).toHaveBeenCalled();
+      expect(outcomes.at(-1)).toMatchObject({
+        status: "refused",
+        code: "unsupported-transfer",
+      });
+      expect(contentOf(editor)).toBe(before);
+      expect(proposalsOf(editor)).toHaveLength(0);
+    },
+  );
 
   it("claims the beforeinput paste bridge and drop insertion halves once", async () => {
     const editor = createPasteEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const before = contentOf(editor);

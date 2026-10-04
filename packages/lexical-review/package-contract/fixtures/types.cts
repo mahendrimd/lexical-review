@@ -34,14 +34,37 @@ const opened: review.ValidationResult<review.ReviewSession> =
 void nodeClass;
 void opened;
 
+function routedSuccess(
+  outcome: review.ReviewRoutedOutcome,
+): number | string | null {
+  if (outcome.status !== "changed" && outcome.status !== "unchanged")
+    return null;
+  const value = outcome.value;
+  if (!value) return null;
+  if ("projectedLength" in value) {
+    const mode: "all-accepted" | "accepted-state" = value.mode;
+    void mode;
+    return value.projectedLength;
+  }
+  const flattened: readonly string[] = value.flattened;
+  const lost: readonly string[] = value.lost;
+  const softBreakConverted: boolean = value.softBreakConverted;
+  void flattened;
+  void lost;
+  void softBreakConverted;
+  return value.source;
+}
+
 // Compile host integration against published declarations, without executing it.
 const options: review.ReviewSessionRegistrationOptions = {
   copyProjection: "accepted-state",
   proposalIdFactory: () => "consumer-proposal",
   onOutcome: (outcome) => {
-    const result: review.ReviewIntentOutcome = outcome;
-    void result;
+    const result: review.ReviewRoutedOutcome = outcome;
+    void routedSuccess(result);
   },
+  onInsertionOutcome: routedSuccess,
+  onDeletionOutcome: routedSuccess,
 };
 const config: review.ReviewExtensionConfig = { initialDocument: null, options };
 const extension = lexical.configExtension(review.ReviewExtension, config);

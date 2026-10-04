@@ -4,9 +4,14 @@ import { classifyTransferInput } from "./ReviewTransferPolicy";
 import {
   $copyReviewSelection,
   $cutReviewSelection,
+  type ReviewClipboardOutcome,
   type ReviewCopyProjectionMode,
 } from "./ReviewClipboard";
-import { $dropReviewSelection, $pasteReviewSelection } from "./ReviewPaste";
+import {
+  $dropReviewSelection,
+  $pasteReviewSelection,
+  type ReviewPasteOutcome,
+} from "./ReviewPaste";
 import { registerReviewInputFormatting } from "./ReviewInputFormatting";
 import {
   $setReviewFormatting,
@@ -92,6 +97,10 @@ export const RESOLVE_REVIEW_PROPOSALS_COMMAND =
     "RESOLVE_REVIEW_PROPOSALS_COMMAND",
   );
 
+/** Outcomes delivered by input routing, preserving clipboard and paste payloads. */
+export type ReviewRoutedOutcome =
+  ReviewIntentOutcome | ReviewClipboardOutcome | ReviewPasteOutcome;
+
 export type ReviewSessionRegistrationOptions = ReviewAuthoringOptions &
   Readonly<{
     /**
@@ -99,9 +108,9 @@ export type ReviewSessionRegistrationOptions = ReviewAuthoringOptions &
      * `"all-accepted"`; hosts may select `"accepted-state"` instead.
      */
     copyProjection?: ReviewCopyProjectionMode;
-    onDeletionOutcome?: (outcome: ReviewIntentOutcome) => void;
-    onInsertionOutcome?: (outcome: ReviewIntentOutcome) => void;
-    onOutcome?: (outcome: ReviewIntentOutcome) => void;
+    onDeletionOutcome?: (outcome: ReviewRoutedOutcome) => void;
+    onInsertionOutcome?: (outcome: ReviewRoutedOutcome) => void;
+    onOutcome?: (outcome: ReviewRoutedOutcome) => void;
   }>;
 
 function unsupportedOutcome(
@@ -113,7 +122,7 @@ function unsupportedOutcome(
 
 function reportOutcome(
   options: ReviewSessionRegistrationOptions,
-  outcome: ReviewIntentOutcome,
+  outcome: ReviewRoutedOutcome,
   kind: "deletion" | "insertion" | null,
 ): void {
   options.onOutcome?.(outcome);
@@ -309,7 +318,7 @@ export function registerReviewSession(
       $copyReviewSelection(event, {
         ...options,
         mode: clipboardMode(),
-      }) as unknown as ReviewIntentOutcome,
+      }),
       null,
     );
     return true;
@@ -322,7 +331,7 @@ export function registerReviewSession(
       $cutReviewSelection(event, {
         ...options,
         mode: clipboardMode(),
-      }) as unknown as ReviewIntentOutcome,
+      }),
       null,
     );
     return true;
@@ -330,21 +339,13 @@ export function registerReviewSession(
   const handlePaste = (event?: Event | null): boolean => {
     if (event && handledEvents.has(event)) return true;
     if (event) handledEvents.add(event);
-    reportOutcome(
-      options,
-      $pasteReviewSelection(event, options) as unknown as ReviewIntentOutcome,
-      "insertion",
-    );
+    reportOutcome(options, $pasteReviewSelection(event, options), "insertion");
     return true;
   };
   const handleDrop = (event?: Event | null): boolean => {
     if (event && handledEvents.has(event)) return true;
     if (event) handledEvents.add(event);
-    reportOutcome(
-      options,
-      $dropReviewSelection(event, options) as unknown as ReviewIntentOutcome,
-      "insertion",
-    );
+    reportOutcome(options, $dropReviewSelection(event, options), "insertion");
     return true;
   };
   const handleRemoval = (event: InputEvent | null): boolean => {

@@ -19,7 +19,7 @@ import {
   ReviewFragmentNode,
   ReviewInsertionNode,
 } from "./index";
-import type { ReviewIntentOutcome } from "./registerReviewSession";
+import type { ReviewRoutedOutcome } from "./registerReviewSession";
 import {
   paragraph,
   reviewDocument,
@@ -51,7 +51,7 @@ function insert(editor: LexicalEditor, value: string) {
 
 describe("ReviewExtension lifecycle", () => {
   it("registers every review node and opens its document after Lexical initialization", async () => {
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const editor = buildEditorFromExtensions({
       name: "review-extension-initialization",
       $initialEditorState: () => {
@@ -161,7 +161,7 @@ describe("ReviewExtension lifecycle", () => {
   });
 
   it("detaches, reopens, and disposes routing without duplicate registrations", () => {
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const editor = buildEditorFromExtensions(
       configExtension(ReviewExtension, {
         initialDocument: baseline(),
@@ -193,8 +193,8 @@ describe("ReviewExtension lifecycle", () => {
   });
 
   it("updates routing options without reopening the document", () => {
-    const oldOutcomes: ReviewIntentOutcome[] = [];
-    const newOutcomes: ReviewIntentOutcome[] = [];
+    const oldOutcomes: ReviewRoutedOutcome[] = [];
+    const newOutcomes: ReviewRoutedOutcome[] = [];
     const editor = buildEditorFromExtensions(
       configExtension(ReviewExtension, {
         initialDocument: reviewDocument([

@@ -40,6 +40,7 @@ import {
   RESOLVE_REVIEW_PROPOSALS_COMMAND,
   registerReviewSession,
   type ReviewIntentOutcome,
+  type ReviewRoutedOutcome,
 } from "./registerReviewSession";
 import type { ProposalResolutionAction } from "./ReviewResolution";
 import {
@@ -60,7 +61,7 @@ type Harness = {
   editor: LexicalEditor;
   session: ReviewSession;
   errors: Error[];
-  outcomes: ReviewIntentOutcome[];
+  outcomes: ReviewRoutedOutcome[];
   unregister: () => void;
   update: (fn: () => void) => void;
 };
@@ -69,7 +70,7 @@ function harness(
   options: Parameters<typeof registerReviewSession>[2] = {},
 ): Harness {
   const errors: Error[] = [];
-  const outcomes: ReviewIntentOutcome[] = [];
+  const outcomes: ReviewRoutedOutcome[] = [];
   const editor = createEditor({
     namespace: "review-resolution-route",
     nodes: [...NODES],

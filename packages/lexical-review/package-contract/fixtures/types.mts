@@ -14,7 +14,7 @@ import {
   type ReviewExtensionOutput,
   type ReviewSessionRegistrationOptions,
   type ReviewResolutionRoutePayload,
-  type ReviewIntentOutcome,
+  type ReviewRoutedOutcome,
   type ReviewFragment,
   INSERT_REVIEW_FRAGMENT_COMMAND,
   RESOLVE_REVIEW_PROPOSALS_COMMAND,
@@ -82,14 +82,35 @@ editor.update(() => {
   void $inspectReviewProposal("pending-format");
 });
 
+function routedSuccess(outcome: ReviewRoutedOutcome): number | string | null {
+  if (outcome.status !== "changed" && outcome.status !== "unchanged")
+    return null;
+  const value = outcome.value;
+  if (!value) return null;
+  if ("projectedLength" in value) {
+    const mode: "all-accepted" | "accepted-state" = value.mode;
+    void mode;
+    return value.projectedLength;
+  }
+  const flattened: readonly string[] = value.flattened;
+  const lost: readonly string[] = value.lost;
+  const softBreakConverted: boolean = value.softBreakConverted;
+  void flattened;
+  void lost;
+  void softBreakConverted;
+  return value.source;
+}
+
 // Compile host integration against published declarations, without executing it.
 const options: ReviewSessionRegistrationOptions = {
   copyProjection: "accepted-state",
   proposalIdFactory: () => "consumer-proposal",
   onOutcome: (outcome) => {
-    const result: ReviewIntentOutcome = outcome;
-    void result;
+    const result: ReviewRoutedOutcome = outcome;
+    void routedSuccess(result);
   },
+  onInsertionOutcome: routedSuccess,
+  onDeletionOutcome: routedSuccess,
 };
 const config: ReviewExtensionConfig = { initialDocument: null, options };
 const extension = configExtension(ReviewExtension, config);

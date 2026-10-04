@@ -149,6 +149,92 @@ test("one physical action is claimed once", async ({ page }) => {
   expect(keyboardCount).toBe(1);
 });
 
+test("native copy drop inserts at the live selection", async ({ page }) => {
+  const result = await page.evaluate(() => {
+    window.__routeWiringFixture!.reset();
+    window.__routeWiringFixture!.selectAccepted();
+    const dataTransfer = new DataTransfer();
+    dataTransfer.setData("text/plain", "x");
+    // Chromium ignores the setter outside a drag; configure the native
+    // transfer's effect explicitly for this synthetic drop event.
+    Object.defineProperty(dataTransfer, "dropEffect", { value: "copy" });
+    const event = new DragEvent("drop", {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer,
+    });
+    document
+      .querySelector('[data-testid="route-wiring-editor"]')!
+      .dispatchEvent(event);
+    return {
+      prevented: event.defaultPrevented,
+      dropEffect: event.dataTransfer?.dropEffect,
+      outcome: window.__routeWiringFixture!.snapshot().lastOutcome,
+    };
+  });
+  expect(result).toMatchObject({
+    prevented: true,
+    dropEffect: "copy",
+    outcome: { status: "changed" },
+  });
+  const editor = page.getByTestId("route-wiring-editor");
+  await expect(editor).toHaveText("AxB");
+  await expect(editor.locator("ins")).toHaveText("x");
+  const snapshot = await page.evaluate(() =>
+    window.__routeWiringFixture!.snapshot(),
+  );
+  expect(snapshot.document).toMatchObject({ status: "valid" });
+  expect(snapshot.proposals).toEqual(["route-wiring-1"]);
+  expect(snapshot.outcomeCount).toBe(1);
+  expect(snapshot.lastOutcome).toMatchObject({
+    status: "changed",
+    value: { source: "text/plain" },
+  });
+});
+
+for (const dropEffect of ["move", "none"] as const) {
+  test(`native ${dropEffect} drop refuses without mutation`, async ({
+    page,
+  }) => {
+    const result = await page.evaluate((effect) => {
+      const fixture = window.__routeWiringFixture!;
+      fixture.reset();
+      fixture.selectAccepted();
+      const before = fixture.snapshot();
+      const dataTransfer = new DataTransfer();
+      dataTransfer.setData("text/plain", "x");
+      // Match the synthetic copy event's setup, including in Chromium.
+      Object.defineProperty(dataTransfer, "dropEffect", { value: effect });
+      const event = new DragEvent("drop", {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer,
+      });
+      document
+        .querySelector('[data-testid="route-wiring-editor"]')!
+        .dispatchEvent(event);
+      return {
+        before,
+        prevented: event.defaultPrevented,
+        dropEffect: event.dataTransfer?.dropEffect,
+      };
+    }, dropEffect);
+    expect(result.prevented).toBe(true);
+    expect(result.dropEffect).toBe(dropEffect);
+    const editor = page.getByTestId("route-wiring-editor");
+    await expect(editor).toHaveText("AB");
+    await expect(editor.locator("ins, del")).toHaveCount(0);
+    const after = await page.evaluate(() =>
+      window.__routeWiringFixture!.snapshot(),
+    );
+    expect(after.document).toEqual(result.before.document);
+    expect(after.selection).toEqual(result.before.selection);
+    expect(after.proposals).toEqual([]);
+    expect(after.outcomeCount).toBe(1);
+    expect(after.lastOutcome).toMatchObject({ status: "refused" });
+  });
+}
+
 test("toolbar resolve matches direct resolution as one action", async ({
   page,
 }) => {

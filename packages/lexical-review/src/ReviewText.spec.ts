@@ -17,7 +17,7 @@ import {
   openReviewSession,
   ReviewInsertionNode,
   ReviewDeletionNode,
-  type ReviewIntentOutcome,
+  type ReviewRoutedOutcome,
   registerReviewSession,
 } from "./index";
 import {
@@ -73,7 +73,7 @@ it.each(["direct", "command"] as const)(
   "authors, navigates, corrects and reopens the same identity through %s",
   async (route) => {
     const { editor, session } = setup();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const factory = () => "insertion";
     const unregister = registerReviewSession(editor, session, {
       proposalIdFactory: factory,
