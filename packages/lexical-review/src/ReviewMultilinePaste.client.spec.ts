@@ -102,9 +102,9 @@ function open(
     throw new Error("Expected the review document to open.");
   const unregister = registerReviewSession(editor, opened.value, {
     ...options,
-    onOutcome: (outcome) => {
+    onOutcome: (outcome, operation) => {
       outcomes.push(outcome);
-      options.onOutcome?.(outcome);
+      options.onOutcome?.(outcome, operation);
     },
   });
   return { session: opened.value, unregister };

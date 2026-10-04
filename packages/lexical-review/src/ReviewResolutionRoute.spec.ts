@@ -13,6 +13,17 @@ import {
   $isRangeSelection,
   BEFORE_INPUT_COMMAND,
   CONTROLLED_TEXT_INSERTION_COMMAND,
+  COPY_COMMAND,
+  CUT_COMMAND,
+  DELETE_CHARACTER_COMMAND,
+  DELETE_LINE_COMMAND,
+  DELETE_WORD_COMMAND,
+  DROP_COMMAND,
+  FORMAT_TEXT_COMMAND,
+  INSERT_LINE_BREAK_COMMAND,
+  PASTE_COMMAND,
+  REMOVE_TEXT_COMMAND,
+  SET_TEXT_FORMAT_COMMAND,
   INSERT_PARAGRAPH_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_ENTER_COMMAND,
@@ -37,10 +48,12 @@ import {
   type ReviewSession,
 } from "./index";
 import {
+  INSERT_REVIEW_FRAGMENT_COMMAND,
   RESOLVE_REVIEW_PROPOSALS_COMMAND,
   registerReviewSession,
   type ReviewIntentOutcome,
   type ReviewRoutedOutcome,
+  type ReviewRoutedOperation,
 } from "./registerReviewSession";
 import type { ProposalResolutionAction } from "./ReviewResolution";
 import {
@@ -62,6 +75,7 @@ type Harness = {
   session: ReviewSession;
   errors: Error[];
   outcomes: ReviewRoutedOutcome[];
+  operations: ReviewRoutedOperation[];
   unregister: () => void;
   update: (fn: () => void) => void;
 };
@@ -71,6 +85,7 @@ function harness(
 ): Harness {
   const errors: Error[] = [];
   const outcomes: ReviewRoutedOutcome[] = [];
+  const operations: ReviewRoutedOperation[] = [];
   const editor = createEditor({
     namespace: "review-resolution-route",
     nodes: [...NODES],
@@ -85,9 +100,10 @@ function harness(
   if (opened.status !== "valid") throw new Error("Invalid fixture");
   const unregister = registerReviewSession(editor, opened.value, {
     ...options,
-    onOutcome: (outcome) => {
+    onOutcome: (outcome, operation) => {
       outcomes.push(outcome);
-      options.onOutcome?.(outcome);
+      operations.push(operation);
+      options.onOutcome?.(outcome, operation);
     },
   });
   const update = (fn: () => void) => editor.update(fn, { discrete: true });
@@ -96,6 +112,7 @@ function harness(
     session: opened.value,
     errors,
     outcomes,
+    operations,
     unregister,
     update,
   };
@@ -246,6 +263,7 @@ function resolveViaRoute(
   });
   expect(claimed).toBe(true);
   expect(h.outcomes).toHaveLength(seen + 1);
+  expect(h.operations.at(-1)).toEqual("resolve-proposals");
   return h.outcomes[h.outcomes.length - 1]!;
 }
 
@@ -602,6 +620,218 @@ describe("route claiming", () => {
         ).toBe(true);
       });
       expect(h.outcomes).toHaveLength(3);
+      expect(h.operations).toEqual([
+        "split-paragraph",
+        "insert-line-break",
+        "replace-text",
+      ]);
+    } finally {
+      h.unregister();
+    }
+  });
+});
+
+describe("routed operations", () => {
+  const routes: readonly {
+    operation: ReviewRoutedOperation;
+    status: ReviewRoutedOutcome["status"];
+    dispatch: (editor: LexicalEditor) => boolean;
+  }[] = [
+    {
+      operation: "insert-text",
+      status: "changed",
+      dispatch: (editor) =>
+        editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "x"),
+    },
+    {
+      operation: "replace-text",
+      status: "changed",
+      dispatch: (editor) =>
+        editor.dispatchCommand(
+          CONTROLLED_TEXT_INSERTION_COMMAND,
+          new InputEvent("beforeinput", {
+            inputType: "insertReplacementText",
+            data: "x",
+          }),
+        ),
+    },
+    ...(["insertText", "insertReplacementText"] as const).map((inputType) => ({
+      operation:
+        inputType === "insertText"
+          ? ("insert-text" as const)
+          : ("replace-text" as const),
+      status: "changed" as const,
+      dispatch: (editor: LexicalEditor) =>
+        editor.dispatchCommand(
+          BEFORE_INPUT_COMMAND,
+          new InputEvent("beforeinput", { inputType, data: "x" }),
+        ),
+    })),
+    {
+      operation: "delete-text",
+      status: "changed",
+      dispatch: (editor) =>
+        editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true),
+    },
+    {
+      operation: "delete-text",
+      status: "changed",
+      dispatch: (editor) => editor.dispatchCommand(DELETE_WORD_COMMAND, true),
+    },
+    {
+      operation: "delete-text",
+      status: "refused",
+      dispatch: (editor) => editor.dispatchCommand(DELETE_LINE_COMMAND, true),
+    },
+    {
+      operation: "delete-text",
+      status: "unchanged",
+      dispatch: (editor) => editor.dispatchCommand(REMOVE_TEXT_COMMAND, null),
+    },
+    {
+      operation: "delete-text",
+      status: "refused",
+      dispatch: (editor) =>
+        editor.dispatchCommand(
+          REMOVE_TEXT_COMMAND,
+          new InputEvent("beforeinput", { inputType: "deleteContent" }),
+        ),
+    },
+    {
+      operation: "split-paragraph",
+      status: "changed",
+      dispatch: (editor) =>
+        editor.dispatchCommand(INSERT_PARAGRAPH_COMMAND, undefined),
+    },
+    {
+      operation: "insert-line-break",
+      status: "refused",
+      dispatch: (editor) =>
+        editor.dispatchCommand(INSERT_LINE_BREAK_COMMAND, false),
+    },
+    {
+      operation: "format-text",
+      status: "changed",
+      dispatch: (editor) => editor.dispatchCommand(FORMAT_TEXT_COMMAND, "bold"),
+    },
+    {
+      operation: "format-text",
+      status: "changed",
+      dispatch: (editor) =>
+        editor.dispatchCommand(
+          BEFORE_INPUT_COMMAND,
+          new InputEvent("beforeinput", { inputType: "formatBold" }),
+        ),
+    },
+    {
+      operation: "format-text",
+      status: "refused",
+      dispatch: (editor) =>
+        editor.dispatchCommand(
+          BEFORE_INPUT_COMMAND,
+          new InputEvent("beforeinput", { inputType: "formatJustifyCenter" }),
+        ),
+    },
+    {
+      operation: "format-text",
+      status: "changed",
+      dispatch: (editor) =>
+        editor.dispatchCommand(SET_TEXT_FORMAT_COMMAND, { bold: true }),
+    },
+    {
+      operation: "copy",
+      status: "refused",
+      dispatch: (editor) => editor.dispatchCommand(COPY_COMMAND, null),
+    },
+    {
+      operation: "cut",
+      status: "refused",
+      dispatch: (editor) => editor.dispatchCommand(CUT_COMMAND, null),
+    },
+    {
+      operation: "paste",
+      status: "refused",
+      dispatch: (editor) =>
+        editor.dispatchCommand(
+          PASTE_COMMAND,
+          new Event("paste") as ClipboardEvent,
+        ),
+    },
+    {
+      operation: "drop",
+      status: "refused",
+      dispatch: (editor) =>
+        editor.dispatchCommand(DROP_COMMAND, new Event("drop") as DragEvent),
+    },
+    {
+      operation: "insert-fragment",
+      status: "changed",
+      dispatch: (editor) =>
+        editor.dispatchCommand(INSERT_REVIEW_FRAGMENT_COMMAND, [
+          { runs: [{ text: "x", format: 0 }] },
+        ]),
+    },
+    {
+      operation: "resolve-proposals",
+      status: "unchanged",
+      dispatch: (editor) =>
+        editor.dispatchCommand(RESOLVE_REVIEW_PROPOSALS_COMMAND, {
+          ids: [],
+          action: "accept",
+        }),
+    },
+    {
+      operation: "insert-text",
+      status: "refused",
+      dispatch: (editor) =>
+        editor.dispatchCommand(
+          CONTROLLED_TEXT_INSERTION_COMMAND,
+          new InputEvent("beforeinput", {
+            inputType: "insertFromYank",
+            data: "x",
+          }),
+        ),
+    },
+  ];
+
+  it.each(routes)(
+    "reports $operation with a $status outcome once",
+    ({ operation, status, dispatch }) => {
+      const h = harness();
+      try {
+        h.update(() => $getRoot().getAllTextNodes()[0]!.select(1, 1));
+        let claimed = false;
+        h.update(() => {
+          claimed = dispatch(h.editor);
+        });
+        expect(claimed).toBe(true);
+        expect(h.errors).toEqual([]);
+        expect(h.outcomes).toMatchObject([{ status }]);
+        expect(h.operations).toEqual([operation]);
+      } finally {
+        h.unregister();
+      }
+    },
+  );
+
+  it("identifies deletion when it removes an insertion proposal", () => {
+    const h = harness();
+    try {
+      author(h, "insertion");
+      h.update(() => {
+        $getRoot()
+          .getAllTextNodes()
+          .find((node) => node.getTextContent() === "x")!
+          .selectEnd();
+        expect(h.editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(
+          true,
+        );
+      });
+      expect(h.outcomes).toMatchObject([{ status: "changed" }]);
+      expect(h.operations).toEqual(["delete-text"]);
+      h.update(() =>
+        expect($inspectReviewProposal("p-insertion").status).toBe("refused"),
+      );
     } finally {
       h.unregister();
     }

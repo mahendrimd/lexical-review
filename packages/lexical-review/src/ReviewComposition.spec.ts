@@ -128,9 +128,9 @@ function open(
   }
   const unregister = registerReviewSession(editor, opened.value, {
     ...options,
-    onOutcome: (outcome) => {
+    onOutcome: (outcome, operation) => {
       outcomes.push(outcome);
-      options.onOutcome?.(outcome);
+      options.onOutcome?.(outcome, operation);
     },
   });
   // Composition completion flows through Lexical's DOM-synced
@@ -176,11 +176,12 @@ describe("composition normalization (#64)", () => {
   it("commits inline IME text as one insertion proposal", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewRoutedOutcome[] = [];
+    const report = vi.fn();
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
       outcomes,
-      { proposalIdFactory: () => "composition-a" },
+      { onOutcome: report, proposalIdFactory: () => "composition-a" },
     );
     await update(editor, () => {
       firstText(firstParagraph()).select(1, 1);
@@ -188,6 +189,8 @@ describe("composition normalization (#64)", () => {
     await startComposition(editor);
     await commitComposition(editor, "あ");
 
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenLastCalledWith(outcomes[0], "insert-text");
     expect(outcomes).toMatchObject([{ status: "changed" }]);
     expect(outcomes).toHaveLength(1);
     editor.getEditorState().read(() => {
@@ -265,10 +268,12 @@ describe("composition normalization (#64)", () => {
   it("treats an empty collapsed completion as unchanged without mutation", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewRoutedOutcome[] = [];
+    const report = vi.fn();
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
       outcomes,
+      { onOutcome: report },
     );
     await update(editor, () => {
       firstText(firstParagraph()).select(1, 1);
@@ -278,6 +283,8 @@ describe("composition normalization (#64)", () => {
     await startComposition(editor);
     await commitComposition(editor, "");
 
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenLastCalledWith(outcomes[0], "insert-text");
     expect(outcomes).toMatchObject([{ status: "unchanged" }]);
     expect(outcomes).toHaveLength(1);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
@@ -290,11 +297,12 @@ describe("composition normalization (#64)", () => {
   it("normalizes an empty commit over a range into one deletion", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewRoutedOutcome[] = [];
+    const report = vi.fn();
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
       outcomes,
-      { proposalIdFactory: () => "composition-deletion" },
+      { onOutcome: report, proposalIdFactory: () => "composition-deletion" },
     );
     await update(editor, () => {
       firstText(firstParagraph()).select(0, 1);
@@ -302,6 +310,8 @@ describe("composition normalization (#64)", () => {
     await startComposition(editor);
     await commitComposition(editor, "");
 
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenLastCalledWith(outcomes[0], "delete-text");
     expect(outcomes).toMatchObject([{ status: "changed" }]);
     editor.getEditorState().read(() => {
       const inspected = $inspectReviewProposal("composition-deletion");
@@ -315,10 +325,12 @@ describe("composition normalization (#64)", () => {
   it("refuses a trailing-newline commit without mutation", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewRoutedOutcome[] = [];
+    const report = vi.fn();
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
       outcomes,
+      { onOutcome: report },
     );
     await update(editor, () => {
       firstText(firstParagraph()).selectEnd();
@@ -328,6 +340,8 @@ describe("composition normalization (#64)", () => {
     await startComposition(editor);
     await commitComposition(editor, "確定\n");
 
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenLastCalledWith(outcomes[0], "insert-text");
     expect(outcomes).toMatchObject([
       { code: "unsupported-input", status: "refused" },
     ]);
@@ -523,11 +537,12 @@ describe("composition normalization (#64)", () => {
   it("claims Safari-style insertFromComposition plus compositionend once", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewRoutedOutcome[] = [];
+    const report = vi.fn();
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
       outcomes,
-      { proposalIdFactory: () => "composition-dedup" },
+      { onOutcome: report, proposalIdFactory: () => "composition-dedup" },
     );
     await update(editor, () => {
       firstText(firstParagraph()).select(1, 1);
@@ -545,6 +560,8 @@ describe("composition normalization (#64)", () => {
     ).toBe(true);
     await commitComposition(editor, "あ");
 
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenLastCalledWith(outcomes[0], "insert-text");
     expect(outcomes).toMatchObject([{ status: "changed" }]);
     expect(outcomes).toHaveLength(1);
     editor.getEditorState().read(() => {
@@ -602,51 +619,66 @@ describe("composition normalization (#64)", () => {
     unregister();
   });
 
-  it("reports failed with snapshot recovery when the apply update throws", async () => {
-    const editor = createReviewEditor();
-    const outcomes: ReviewRoutedOutcome[] = [];
-    const { unregister } = open(
-      editor,
-      reviewDocument([paragraph([text("AB")])]),
-      outcomes,
-      { proposalIdFactory: () => "composition-failed" },
-    );
-    await update(editor, () => {
-      firstText(firstParagraph()).select(1, 1);
-    });
-    const beforeDocument = editor.getEditorState().toJSON();
-    const beforeSelection = editor.getEditorState().read(liveSelection);
-    await startComposition(editor);
-    // Failure-injection exception (allowed system boundary): a throwing
-    // Lexical update is unreachable via public composition input. Stubbing
-    // the apply step is the only way to prove the failed + snapshot-recovery
-    // outcome below.
-    const applyUpdate = vi
-      .spyOn(editor, "update")
-      .mockImplementationOnce(() => {
-        throw new Error("apply failed");
-      });
-    await commitComposition(editor, "あ");
-    applyUpdate.mockRestore();
-
-    expect(outcomes).toMatchObject([
-      {
-        error: { code: "composition-normalization-failed" },
-        status: "failed",
-      },
-    ]);
-    expect(outcomes).toHaveLength(1);
-    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
-    editor.getEditorState().read(() => {
-      expect($inspectReviewProposal("composition-failed").status).not.toBe(
-        "unchanged",
+  it.each([
+    { data: "あ", from: 1, to: 1, operation: "insert-text" },
+    { data: "", from: 0, to: 1, operation: "delete-text" },
+  ] as const)(
+    "reports failed $operation when normalization throws",
+    async ({ data, from, to, operation }) => {
+      const editor = createReviewEditor();
+      const outcomes: ReviewRoutedOutcome[] = [];
+      const report = vi.fn();
+      const { unregister } = open(
+        editor,
+        reviewDocument([paragraph([text("AB")])]),
+        outcomes,
+        { onOutcome: report, proposalIdFactory: () => "composition-failed" },
       );
-    });
-    unregister();
-  });
+      await update(editor, () => {
+        firstText(firstParagraph()).select(from, to);
+      });
+      const beforeDocument = editor.getEditorState().toJSON();
+      const beforeSelection = editor.getEditorState().read(liveSelection);
+      await startComposition(editor);
+      // Failure-injection exception (allowed system boundary): normalization
+      // errors are unreachable via ordinary composition input. Exercise an
+      // insertion apply failure and a deletion snapshot-restore failure.
+      // Both retain the attempted operation; a restore failure carries no
+      // preservation guarantee.
+      const normalization =
+        operation === "delete-text"
+          ? vi.spyOn(editor, "setEditorState").mockImplementationOnce(() => {
+              throw new Error("restore failed");
+            })
+          : vi.spyOn(editor, "update").mockImplementationOnce(() => {
+              throw new Error("apply failed");
+            });
+      await commitComposition(editor, data);
+      normalization.mockRestore();
+
+      expect(report).toHaveBeenCalledTimes(1);
+      expect(report).toHaveBeenLastCalledWith(outcomes[0], operation);
+      expect(outcomes).toMatchObject([
+        {
+          error: { code: "composition-normalization-failed" },
+          status: "failed",
+        },
+      ]);
+      expect(outcomes).toHaveLength(1);
+      if (operation === "insert-text") {
+        expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+        expect(editor.getEditorState().read(liveSelection)).toEqual(
+          beforeSelection,
+        );
+      }
+      editor.getEditorState().read(() => {
+        expect($inspectReviewProposal("composition-failed").status).not.toBe(
+          "unchanged",
+        );
+      });
+      unregister();
+    },
+  );
 
   it("refuses resolution while composition is active", async () => {
     const editor = createReviewEditor();

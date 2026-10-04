@@ -101,6 +101,21 @@ export const RESOLVE_REVIEW_PROPOSALS_COMMAND =
 export type ReviewRoutedOutcome =
   ReviewIntentOutcome | ReviewClipboardOutcome | ReviewPasteOutcome;
 
+/** The attempted routed operation, independent of any resulting proposal kind. */
+export type ReviewRoutedOperation =
+  | "insert-text"
+  | "replace-text"
+  | "delete-text"
+  | "split-paragraph"
+  | "insert-line-break"
+  | "format-text"
+  | "copy"
+  | "cut"
+  | "paste"
+  | "drop"
+  | "insert-fragment"
+  | "resolve-proposals";
+
 export type ReviewSessionRegistrationOptions = ReviewAuthoringOptions &
   Readonly<{
     /**
@@ -108,9 +123,11 @@ export type ReviewSessionRegistrationOptions = ReviewAuthoringOptions &
      * `"all-accepted"`; hosts may select `"accepted-state"` instead.
      */
     copyProjection?: ReviewCopyProjectionMode;
-    onDeletionOutcome?: (outcome: ReviewRoutedOutcome) => void;
-    onInsertionOutcome?: (outcome: ReviewRoutedOutcome) => void;
-    onOutcome?: (outcome: ReviewRoutedOutcome) => void;
+    /** Reports each routed outcome with the operation that was attempted. */
+    onOutcome?: (
+      outcome: ReviewRoutedOutcome,
+      operation: ReviewRoutedOperation,
+    ) => void;
   }>;
 
 function unsupportedOutcome(
@@ -123,14 +140,9 @@ function unsupportedOutcome(
 function reportOutcome(
   options: ReviewSessionRegistrationOptions,
   outcome: ReviewRoutedOutcome,
-  kind: "deletion" | "insertion" | null,
+  operation: ReviewRoutedOperation,
 ): void {
-  options.onOutcome?.(outcome);
-  if (kind === "deletion") {
-    options.onDeletionOutcome?.(outcome);
-  } else if (kind === "insertion") {
-    options.onInsertionOutcome?.(outcome);
-  }
+  options.onOutcome?.(outcome, operation);
 }
 
 export function registerReviewSession(
@@ -151,7 +163,7 @@ export function registerReviewSession(
     editor,
     handledEvents,
     options,
-    report: (outcome, kind) => reportOutcome(options, outcome, kind),
+    report: (outcome, operation) => reportOutcome(options, outcome, operation),
   });
   const handleDeletion = (
     backward: boolean,
@@ -163,7 +175,7 @@ export function registerReviewSession(
     if (event) handledEvents.add(event);
     event?.preventDefault();
     const outcome = $deleteReviewText(backward, { ...options, granularity });
-    reportOutcome(options, outcome, "deletion");
+    reportOutcome(options, outcome, "delete-text");
     return true;
   };
   const handleSplit = (event?: Event | null): boolean => {
@@ -171,7 +183,7 @@ export function registerReviewSession(
     event?.preventDefault();
     if (event && handledEvents.has(event)) return true;
     if (event) handledEvents.add(event);
-    reportOutcome(options, $splitReviewParagraph(options), null);
+    reportOutcome(options, $splitReviewParagraph(options), "split-paragraph");
     return true;
   };
   const handleBeforeInput = (event: InputEvent): boolean => {
@@ -209,7 +221,13 @@ export function registerReviewSession(
           event.inputType === "insertReplacementText"
             ? $replaceReviewText
             : $insertReviewText;
-        reportOutcome(options, operation(event.data, options), "insertion");
+        reportOutcome(
+          options,
+          operation(event.data, options),
+          event.inputType === "insertReplacementText"
+            ? "replace-text"
+            : "insert-text",
+        );
       }
       return true;
     }
@@ -242,7 +260,7 @@ export function registerReviewSession(
         reportOutcome(
           options,
           $toggleReviewFormatting(property, options),
-          null,
+          "format-text",
         );
       }
       return true;
@@ -256,7 +274,7 @@ export function registerReviewSession(
           "unsupported-formatting",
           "Unsupported native formatting property.",
         ),
-        null,
+        "format-text",
       );
       return true;
     }
@@ -272,7 +290,7 @@ export function registerReviewSession(
         "unsupported-target",
         "Review deletion supports character, word, and explicit range intentions; line deletion is unsupported.",
       ),
-      "deletion",
+      "delete-text",
     );
     return true;
   };
@@ -283,7 +301,7 @@ export function registerReviewSession(
         "unsupported-structure",
         "Soft line breaks are unsupported in review mode.",
       ),
-      null,
+      "insert-line-break",
     );
     return true;
   };
@@ -295,7 +313,7 @@ export function registerReviewSession(
         "unsupported-transfer",
         "Content transfer is not supported by the node-backed review session yet.",
       ),
-      null,
+      "insert-text",
     );
     return true;
   };
@@ -319,7 +337,7 @@ export function registerReviewSession(
         ...options,
         mode: clipboardMode(),
       }),
-      null,
+      "copy",
     );
     return true;
   };
@@ -332,20 +350,20 @@ export function registerReviewSession(
         ...options,
         mode: clipboardMode(),
       }),
-      null,
+      "cut",
     );
     return true;
   };
   const handlePaste = (event?: Event | null): boolean => {
     if (event && handledEvents.has(event)) return true;
     if (event) handledEvents.add(event);
-    reportOutcome(options, $pasteReviewSelection(event, options), "insertion");
+    reportOutcome(options, $pasteReviewSelection(event, options), "paste");
     return true;
   };
   const handleDrop = (event?: Event | null): boolean => {
     if (event && handledEvents.has(event)) return true;
     if (event) handledEvents.add(event);
-    reportOutcome(options, $dropReviewSelection(event, options), "insertion");
+    reportOutcome(options, $dropReviewSelection(event, options), "drop");
     return true;
   };
   const handleRemoval = (event: InputEvent | null): boolean => {
@@ -362,7 +380,7 @@ export function registerReviewSession(
           "unsupported-input",
           "This native text-removal route is not supported by the node-backed review session.",
         ),
-        "deletion",
+        "delete-text",
       );
       return true;
     }
@@ -371,7 +389,7 @@ export function registerReviewSession(
       reportOutcome(
         options,
         { status: "unchanged", value: undefined },
-        "deletion",
+        "delete-text",
       );
       return true;
     }
@@ -416,7 +434,7 @@ export function registerReviewSession(
         reportOutcome(
           options,
           $insertReviewFragment(fragment, options),
-          "insertion",
+          "insert-fragment",
         );
         return true;
       },
@@ -436,7 +454,7 @@ export function registerReviewSession(
                 "Resolution commands carry exactly one action: accept, reject, or remove.",
               )
             : $resolveReviewProposals(payload.ids, payload.action);
-        reportOutcome(options, outcome, null);
+        reportOutcome(options, outcome, "resolve-proposals");
         return true;
       },
       COMMAND_PRIORITY_HIGH,
@@ -511,7 +529,14 @@ export function registerReviewSession(
           eventOrText.inputType === "insertReplacementText"
             ? $replaceReviewText(text, options)
             : $insertReviewText(text, options);
-        reportOutcome(options, outcome, "insertion");
+        reportOutcome(
+          options,
+          outcome,
+          typeof eventOrText !== "string" &&
+            eventOrText.inputType === "insertReplacementText"
+            ? "replace-text"
+            : "insert-text",
+        );
         return true;
       },
       COMMAND_PRIORITY_HIGH,
@@ -570,7 +595,7 @@ export function registerReviewSession(
             property as ReviewFormattingProperty,
             options,
           ),
-          null,
+          "format-text",
         );
         return true;
       },
@@ -580,7 +605,11 @@ export function registerReviewSession(
       SET_TEXT_FORMAT_COMMAND,
       (change) => {
         if (editor.isComposing()) return false;
-        reportOutcome(options, $setReviewFormatting(change, options), null);
+        reportOutcome(
+          options,
+          $setReviewFormatting(change, options),
+          "format-text",
+        );
         return true;
       },
       COMMAND_PRIORITY_HIGH,

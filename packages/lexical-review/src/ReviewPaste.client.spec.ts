@@ -89,9 +89,9 @@ function open(
     throw new Error("Expected the review document to open.");
   const unregister = registerReviewSession(editor, opened.value, {
     ...options,
-    onOutcome: (outcome) => {
+    onOutcome: (outcome, operation) => {
       outcomes.push(outcome);
-      options.onOutcome?.(outcome);
+      options.onOutcome?.(outcome, operation);
     },
   });
   return { unregister };
@@ -311,9 +311,12 @@ describe("review single-paragraph paste", () => {
   it("inserts plain text as one fresh insertion with proposal-side caret", async () => {
     const editor = createPasteEditor();
     const outcomes: ReviewRoutedOutcome[] = [];
-    const insertionOutcomes: ReviewRoutedOutcome[] = [];
+    const pasteOutcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes, {
-      onInsertionOutcome: (outcome) => insertionOutcomes.push(outcome),
+      onOutcome: (outcome, operation) => {
+        expect(operation).toEqual("paste");
+        pasteOutcomes.push(outcome);
+      },
     });
     await selectCaret(editor, 0, 1);
     const { event } = pasteEvent("", "x");
@@ -327,7 +330,7 @@ describe("review single-paragraph paste", () => {
     )
       throw new Error("Expected paste normalization payload.");
     expect(routed.value.source).toBe("text/plain");
-    expect(insertionOutcomes.at(-1)).toBe(routed);
+    expect(pasteOutcomes).toEqual([routed]);
     expect(allAcceptedOf(editor)).toEqual(["AxB"]);
     expect(proposalsOf(editor)).toHaveLength(1);
 

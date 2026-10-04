@@ -22,8 +22,9 @@ Start with the [package guide](packages/lexical-review/README.md):
 
 1. [Install the package and its peers](packages/lexical-review/README.md#installation).
 2. [Add the extension and open a review document](packages/lexical-review/README.md#quick-start).
-3. [Author proposals](packages/lexical-review/README.md#authoring-operations).
-4. [Inspect, navigate, and resolve proposals](packages/lexical-review/README.md#reviewing-proposals).
+3. [Configure review input](packages/lexical-review/README.md#configuration) and [handle outcomes](packages/lexical-review/README.md#handling-outcomes).
+4. [Author proposals](packages/lexical-review/README.md#authoring-operations).
+5. [Inspect, navigate, and resolve proposals](packages/lexical-review/README.md#reviewing-proposals).
 
 The [live demo](https://mahendrimd.github.io/lexical-review/) lets you explore
 review interactions before integrating them into your application.
