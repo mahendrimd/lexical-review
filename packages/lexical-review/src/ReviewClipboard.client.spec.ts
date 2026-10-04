@@ -90,9 +90,9 @@ function open(
     throw new Error("Expected the review document to open.");
   const unregister = registerReviewSession(editor, opened.value, {
     ...options,
-    onOutcome: (outcome) => {
+    onOutcome: (outcome, operation) => {
       outcomes.push(outcome);
-      options.onOutcome?.(outcome);
+      options.onOutcome?.(outcome, operation);
     },
   });
   return { unregister };
@@ -158,10 +158,12 @@ describe("review clipboard projections", () => {
   it("copies accepted content identically in both modes without identity", async () => {
     const editor = createClipboardEditor();
     const outcomes: ReviewRoutedOutcome[] = [];
+    const report = vi.fn();
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
       outcomes,
+      { onOutcome: report },
     );
     const [node] = textNodes(editor);
     await update(editor, () => node!.select(0, 2));
@@ -170,6 +172,8 @@ describe("review clipboard projections", () => {
     expect(editor.dispatchCommand(COPY_COMMAND, event)).toBe(true);
     await Promise.resolve();
 
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenLastCalledWith(outcomes[0], "copy");
     expect(outcomes).toMatchObject([
       {
         status: "changed",
@@ -570,10 +574,12 @@ describe("review clipboard projections", () => {
   it("cuts accepted content and claims the gesture once across routes", async () => {
     const editor = createClipboardEditor();
     const outcomes: ReviewRoutedOutcome[] = [];
+    const report = vi.fn();
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
       outcomes,
+      { onOutcome: report },
     );
     const [node] = textNodes(editor);
     await update(editor, () => node!.select(0, 1));
@@ -590,6 +596,8 @@ describe("review clipboard projections", () => {
     expect(editor.dispatchCommand(CUT_COMMAND, clipboard.event)).toBe(true);
     await Promise.resolve();
 
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenLastCalledWith(outcomes[0], "cut");
     expect(outcomes).toHaveLength(1);
     expect(outcomes).toMatchObject([
       { status: "changed", value: { mode: "all-accepted" } },

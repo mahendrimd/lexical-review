@@ -27,7 +27,7 @@ import { validateStructuralState } from "./ReviewStructure";
 
 export type ReviewCompositionReporter = (
   outcome: ReviewIntentOutcome,
-  kind: "deletion" | "insertion" | null,
+  operation: "delete-text" | "insert-text",
 ) => void;
 
 export type ReviewCompositionLifecycle = Readonly<{
@@ -89,6 +89,7 @@ export function createReviewCompositionLifecycle(args: {
     pendingCompositionData = null;
     compositionEnterArmed = false;
     normalizingComposition = true;
+    let operation: "delete-text" | "insert-text" = "insert-text";
     try {
       if (/[\r\n]/u.test(data)) {
         editor.setEditorState(snapshot);
@@ -99,7 +100,7 @@ export function createReviewCompositionLifecycle(args: {
               "Composition commits support inline text only; paragraph breaks are refused without mutation.",
             status: "refused",
           },
-          null,
+          operation,
         );
         return;
       }
@@ -108,14 +109,15 @@ export function createReviewCompositionLifecycle(args: {
           const selection = $getSelection();
           return !$isRangeSelection(selection) || selection.isCollapsed();
         });
+        if (!collapsed) operation = "delete-text";
         editor.setEditorState(snapshot);
         if (collapsed) {
-          report({ status: "unchanged", value: undefined }, null);
+          report({ status: "unchanged", value: undefined }, operation);
           return;
         }
         editor.update(
           () => {
-            report($deleteReviewText(false, options), "deletion");
+            report($deleteReviewText(false, options), operation);
           },
           { discrete: true },
         );
@@ -125,7 +127,7 @@ export function createReviewCompositionLifecycle(args: {
       editor.update(
         () => {
           const structural = validateStructuralState();
-          report(structural ?? $insertReviewText(data, options), "insertion");
+          report(structural ?? $insertReviewText(data, options), operation);
         },
         { discrete: true },
       );
@@ -147,7 +149,7 @@ export function createReviewCompositionLifecycle(args: {
           },
           status: "failed",
         },
-        null,
+        operation,
       );
     } finally {
       normalizingComposition = false;

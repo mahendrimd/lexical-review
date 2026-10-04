@@ -151,33 +151,9 @@ review.options.value = {
 };
 ```
 
-Avoid changing options during text composition.
-
-### Outcome callbacks
-
-`onOutcome` reports routed operation outcomes, including refusals.
-
-`onOutcome`, `onInsertionOutcome`, and `onDeletionOutcome` receive
-`ReviewRoutedOutcome`. Successful text, formatting, structural, and resolution
-operations have no value; successful copy/cut includes `{ mode, projectedLength }`,
-and successful paste/drop includes `{ source, flattened, lost, softBreakConverted }`.
-Narrow by status and the value's properties before reading a payload:
-
-```ts
-import type { ReviewRoutedOutcome } from "lexical-review";
-
-function onOutcome(outcome: ReviewRoutedOutcome) {
-  if (outcome.status !== "changed") return;
-  const value = outcome.value;
-  if (!value) return;
-  if ("projectedLength" in value) console.log(value.projectedLength);
-  else console.log(value.source, value.flattened, value.lost);
-}
-```
-
-Use `ReviewRoutedOutcome` for explicitly annotated routing callbacks and stored
-routed results. For direct semantic calls, use the operation's declared return
-type.
+Avoid changing options during text composition. See [Handling outcomes](#handling-outcomes)
+for callback usage and result handling, and [Copy and cut](#copy-and-cut) for
+clipboard projection choices.
 
 ### Proposal IDs
 
@@ -210,9 +186,8 @@ editor.update(() => {
 });
 ```
 
-A `refused` outcome includes a code and message and preserves content, pending
-proposals, and selection. See [operation outcomes](https://github.com/mahendrimd/lexical-review/blob/main/ARCHITECTURE.md#operation-outcomes)
-for failure handling and guarantees.
+Each call returns an outcome for the attempted action. See
+[Handling outcomes](#handling-outcomes) for success payloads, refusals, and failures.
 
 ### Atomic fragments
 
@@ -285,6 +260,87 @@ the report on a changed outcome.
 Runs supplied to `$applyPasteRuns` must contain string text with no CR/LF and
 integer formatting masks from `0` through `15`. Invalid input refuses before
 mutation or proposal ID allocation; empty content returns `unchanged`.
+
+## Handling outcomes
+
+Browser input reports outcomes through `onOutcome`; programmatic authoring calls
+return outcomes directly. In both cases, check `status` before reading result
+fields:
+
+| Status      | Meaning                                                                        | Available fields                              |
+| ----------- | ------------------------------------------------------------------------------ | --------------------------------------------- |
+| `changed`   | The action changed state or wrote clipboard content.                           | `value`, when the operation returns a payload |
+| `unchanged` | The supported action needed no change.                                         | `value`, when the operation returns a payload |
+| `refused`   | The action was declined, preserving content, pending proposals, and selection. | `code`, `message`                             |
+| `failed`    | An unexpected failure was reported, without a preservation guarantee.          | `error`                                       |
+
+### Browser input feedback
+
+Configure `onOutcome(outcome, operation)` through the [registration options](#configuration)
+to display feedback or handle refused edits. Use `ReviewRoutedOutcome` to
+annotate callback parameters or stored results. The `ReviewRoutedOperation`
+argument identifies the attempted action; callbacks that only need the outcome
+can omit it.
+
+```ts
+import type {
+  ReviewRoutedOperation,
+  ReviewRoutedOutcome,
+} from "lexical-review";
+
+function onOutcome(
+  outcome: ReviewRoutedOutcome,
+  operation: ReviewRoutedOperation,
+) {
+  if (outcome.status === "refused") {
+    console.log(operation, outcome.code, outcome.message);
+  } else if (outcome.status === "failed") {
+    console.error(operation, outcome.error.message);
+  } else {
+    console.log(operation, outcome.status);
+  }
+}
+
+review.options.value = { ...review.options.value, onOutcome };
+```
+
+For example, `"delete-text"` can correct or remove a pending insertion, so the
+action alone does not identify the resulting proposal kind. The reported
+operations are:
+
+| Operation                                    | Action                              |
+| -------------------------------------------- | ----------------------------------- |
+| `insert-text`, `replace-text`, `delete-text` | Insert, replace, or delete text     |
+| `split-paragraph`                            | Split a paragraph                   |
+| `insert-line-break`                          | Insert a soft line break (refused)  |
+| `format-text`                                | Change inline formatting            |
+| `copy`, `cut`, `paste`, `drop`               | Copy, cut, paste, or drop content   |
+| `insert-fragment`                            | Insert an atomic document fragment  |
+| `resolve-proposals`                          | Accept, reject, or remove proposals |
+
+The callback reports an attempted action. To refresh UI from committed document
+content, use the editor's update listener. Programmatic authoring calls return
+their outcomes directly and do not trigger this callback; use each operation's
+declared return type for those calls.
+
+### Success payloads
+
+Successful text, formatting, structural, and resolution operations have no
+value. Successful copy/cut includes `{ mode, projectedLength }`, and successful
+paste/drop includes `{ source, flattened, lost, softBreakConverted }`.
+
+After checking the status, narrow the value's properties to read clipboard
+payloads from a `ReviewRoutedOutcome`:
+
+```ts
+function clipboardFeedback(outcome: ReviewRoutedOutcome) {
+  if (outcome.status !== "changed") return;
+  const value = outcome.value;
+  if (!value) return;
+  if ("projectedLength" in value) console.log(value.projectedLength);
+  else console.log(value.source, value.flattened, value.lost);
+}
+```
 
 ## Reviewing proposals
 

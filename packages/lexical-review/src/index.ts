@@ -151,5 +151,6 @@ export {
   RESOLVE_REVIEW_PROPOSALS_COMMAND,
   type ReviewSessionRegistrationOptions,
   type ReviewRoutedOutcome,
+  type ReviewRoutedOperation,
   type ReviewResolutionRoutePayload,
 } from "./registerReviewSession";

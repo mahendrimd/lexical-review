@@ -52,6 +52,7 @@ function insert(editor: LexicalEditor, value: string) {
 describe("ReviewExtension lifecycle", () => {
   it("registers every review node and opens its document after Lexical initialization", async () => {
     const outcomes: ReviewRoutedOutcome[] = [];
+    const report = vi.fn();
     const editor = buildEditorFromExtensions({
       name: "review-extension-initialization",
       $initialEditorState: () => {
@@ -63,7 +64,10 @@ describe("ReviewExtension lifecycle", () => {
         configExtension(ReviewExtension, {
           initialDocument: baseline(),
           options: {
-            onOutcome: (outcome) => outcomes.push(outcome),
+            onOutcome: (outcome, operation) => {
+              outcomes.push(outcome);
+              report(outcome, operation);
+            },
             proposalIdFactory: () => "ext-1",
           },
         }),
@@ -91,6 +95,10 @@ describe("ReviewExtension lifecycle", () => {
       select(editor);
       expect(insert(editor, "X")).toBe(true);
       expect(outcomes).toHaveLength(1);
+      expect(report).toHaveBeenCalledExactlyOnceWith(
+        outcomes[0],
+        "insert-text",
+      );
       expect(review.session.value?.exportDocument()).toMatchObject({
         status: "valid",
         value: {

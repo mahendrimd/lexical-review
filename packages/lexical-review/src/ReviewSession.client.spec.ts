@@ -108,9 +108,9 @@ function open(
   }
   const unregister = registerReviewSession(editor, opened.value, {
     ...options,
-    onOutcome: (outcome) => {
+    onOutcome: (outcome, operation) => {
       outcomes.push(outcome);
-      options.onOutcome?.(outcome);
+      options.onOutcome?.(outcome, operation);
     },
   });
   return { opened: opened.value, unregister };

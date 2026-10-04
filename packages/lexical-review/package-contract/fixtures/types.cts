@@ -59,13 +59,28 @@ function routedSuccess(
 const options: review.ReviewSessionRegistrationOptions = {
   copyProjection: "accepted-state",
   proposalIdFactory: () => "consumer-proposal",
-  onOutcome: (outcome) => {
+  onOutcome: (outcome, operation) => {
     const result: review.ReviewRoutedOutcome = outcome;
+    const attemptedOperation: review.ReviewRoutedOperation = operation;
+    void attemptedOperation;
     void routedSuccess(result);
   },
+};
+// Outcome-only callbacks remain valid; specialized callbacks are removed.
+const outcomeOnly: review.ReviewSessionRegistrationOptions = {
+  onOutcome: routedSuccess,
+};
+const removedInsertion: review.ReviewSessionRegistrationOptions = {
+  // @ts-expect-error Use onOutcome with its operation argument instead.
   onInsertionOutcome: routedSuccess,
+};
+const removedDeletion: review.ReviewSessionRegistrationOptions = {
+  // @ts-expect-error Use onOutcome with its operation argument instead.
   onDeletionOutcome: routedSuccess,
 };
+void outcomeOnly;
+void removedInsertion;
+void removedDeletion;
 const config: review.ReviewExtensionConfig = { initialDocument: null, options };
 const extension = lexical.configExtension(review.ReviewExtension, config);
 const extensionEditor = extensions.buildEditorFromExtensions(extension);

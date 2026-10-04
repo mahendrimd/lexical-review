@@ -182,10 +182,11 @@ a ready helper result is not itself the final outcome.
 | `failed`          | A route reported an unexpected failure; the no-mutation refusal guarantee does not apply.                     |
 
 Command claiming is separate from success. Client registration reports outcomes
-to the host, so a handled command may still have been refused. Direct
-mutation operations run inside a Lexical update; the returned outcome describes
-the attempted operation, not a notification that the surrounding update has
-committed.
+through `onOutcome(outcome, operation)`, with the operation identifying the
+attempted action rather than the resulting proposal kind. A handled command may
+still have been refused. Direct mutation operations run inside a Lexical update;
+the returned outcome describes the attempted operation, not a notification that
+the surrounding update has committed.
 
 Refusal always precedes mutation; failure is the unexpected path. Unexpected
 mutation errors escape the update callback into Lexical's error handling.

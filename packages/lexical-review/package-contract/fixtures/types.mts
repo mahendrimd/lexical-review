@@ -16,6 +16,7 @@ import {
   type ReviewSessionRegistrationOptions,
   type ReviewResolutionRoutePayload,
   type ReviewRoutedOutcome,
+  type ReviewRoutedOperation,
   type ReviewFragment,
   INSERT_REVIEW_FRAGMENT_COMMAND,
   RESOLVE_REVIEW_PROPOSALS_COMMAND,
@@ -106,13 +107,28 @@ function routedSuccess(outcome: ReviewRoutedOutcome): number | string | null {
 const options: ReviewSessionRegistrationOptions = {
   copyProjection: "accepted-state",
   proposalIdFactory: () => "consumer-proposal",
-  onOutcome: (outcome) => {
+  onOutcome: (outcome, operation) => {
     const result: ReviewRoutedOutcome = outcome;
+    const attemptedOperation: ReviewRoutedOperation = operation;
+    void attemptedOperation;
     void routedSuccess(result);
   },
+};
+// Outcome-only callbacks remain valid; specialized callbacks are removed.
+const outcomeOnly: ReviewSessionRegistrationOptions = {
+  onOutcome: routedSuccess,
+};
+const removedInsertion: ReviewSessionRegistrationOptions = {
+  // @ts-expect-error Use onOutcome with its operation argument instead.
   onInsertionOutcome: routedSuccess,
+};
+const removedDeletion: ReviewSessionRegistrationOptions = {
+  // @ts-expect-error Use onOutcome with its operation argument instead.
   onDeletionOutcome: routedSuccess,
 };
+void outcomeOnly;
+void removedInsertion;
+void removedDeletion;
 const config: ReviewExtensionConfig = { initialDocument: null, options };
 const extension = configExtension(ReviewExtension, config);
 const extensionEditor = buildEditorFromExtensions(extension);
