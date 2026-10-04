@@ -16,9 +16,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Optional prospective tag (for example v3.0.0) to validate against the package version"
+        description: "Prospective tag to verify, or published release tag to stage (for example v3.0.0)"
         required: false
         type: string
+      stage:
+        description: "Stage the verified artifact for the published release tag; requires tag"
+        required: false
+        type: boolean
+        default: false
   release:
     types: ["published"]
 
@@ -28,7 +33,7 @@ permissions:
 jobs:
   verify:
     name: Verify release artifact
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && !inputs.stage
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
@@ -65,8 +70,8 @@ jobs:
           retention-days: 14
 
   publish:
-    name: Publish verified release artifact
-    if: github.event_name == 'release'
+    name: Stage verified release artifact
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.stage)
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
@@ -74,8 +79,29 @@ jobs:
       actions: read
       id-token: write
     steps:
+      - name: Resolve published release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "release:tag: staging requires a published release tag."
+            exit 1
+          fi
+          if [ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "false" ]; then
+            echo "release:tag: staging requires a published GitHub release."
+            exit 1
+          fi
+          printf 'tag=%s\n' "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ steps.release.outputs.tag }}
+
+      - name: Resolve release commit
+        run: echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Setup pnpm and Node.js
         uses: pnpm/setup@v2
@@ -88,9 +114,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          run_id="$(gh run list --commit "$GITHUB_SHA" --workflow release-npm.yml --status success --limit 10 --json databaseId,conclusion --jq '[.[] | select(.conclusion == "success")] | .[0].databaseId // empty')"
+          run_id="$(gh run list --commit "$RELEASE_SHA" --workflow release-npm.yml --event push --status success --limit 10 --json databaseId,conclusion --jq '[.[] | select(.conclusion == "success")] | .[0].databaseId // empty')"
           if [ -z "$run_id" ]; then
-            echo "release:artifact: no successful release-npm verify run on $GITHUB_SHA."
+            echo "release:artifact: no successful release-npm tag verification run on $RELEASE_SHA."
             exit 1
           fi
           gh run download "$run_id" --name release-tarball --dir release-artifact
@@ -104,9 +130,9 @@ jobs:
             local workflow="$1"
             shift
             local run_id
-            run_id="$(gh run list --commit "$GITHUB_SHA" --workflow "$workflow" --status success --limit 10 --json databaseId,conclusion --jq '[.[] | select(.conclusion == "success")] | .[0].databaseId // empty')"
+            run_id="$(gh run list --commit "$RELEASE_SHA" --workflow "$workflow" --status success --limit 10 --json databaseId,conclusion --jq '[.[] | select(.conclusion == "success")] | .[0].databaseId // empty')"
             if [ -z "$run_id" ]; then
-              echo "release:gate: no successful $workflow run on $GITHUB_SHA."
+              echo "release:gate: no successful $workflow run on $RELEASE_SHA."
               exit 1
             fi
             local jobs
@@ -137,19 +163,25 @@ jobs:
           done
 
       - name: Validate release tag against verified artifact
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           mkdir -p tag-check
           tar -xzf release-artifact/lexical-review-*.tgz -C tag-check
           pkg_version="$(jq -r .version tag-check/package/package.json)"
-          tag_version="${{ github.event.release.tag_name }}"
+          tag_version="$RELEASE_TAG"
           tag_version="${tag_version#v}"
           if [ "$pkg_version" != "$tag_version" ]; then
-            echo "release:tag: release tag ${{ github.event.release.tag_name }} disagrees with verified artifact version $pkg_version."
+            echo "release:tag: release tag $RELEASE_TAG disagrees with verified artifact version $pkg_version."
             exit 1
           fi
           echo "release:tag: release tag agrees with verified artifact version $pkg_version."
 
-      - name: Publish to NPM registry
+      - name: Stage on NPM registry
         env:
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org
-        run: pnpm publish release-artifact/lexical-review-*.tgz --access public --no-git-checks --provenance
+        run: pnpm stage publish release-artifact/lexical-review-*.tgz --access public --no-git-checks --provenance
+
+      - name: Explain approval step
+        run: |
+          echo 'The verified package has been staged on npm. Review it in npm’s Staged Packages tab and approve it with 2FA to make it publicly available.' >> "$GITHUB_STEP_SUMMARY"
