@@ -13,6 +13,8 @@ execFileSync(
     "tsconfig.json",
     "--module",
     "ES2022",
+    "--moduleResolution",
+    "Bundler",
     "--outDir",
     "dist/esm",
     "--declaration",
