@@ -11,6 +11,3 @@ overrides:
   "nx@23.2.1>brace-expansion": "5.0.12"
   # https://github.com/advisories/GHSA-7w5x-hrqm-74c2
   "nx@23.2.1>smol-toml": "1.7.1"
-  # Ensure Vite's Rollup dependency includes the path-traversal fix.
-  # https://github.com/rollup/rollup/security/advisories/GHSA-mw96-cpmx-2vgc
-  "vite@7.3.6>rollup": "4.59.0"
