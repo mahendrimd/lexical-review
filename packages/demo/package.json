@@ -13,13 +13,13 @@
     "@lexical/react": "0.52.0",
     "lexical": "0.52.0",
     "lexical-review": "workspace:3.0.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@lexical/history": "0.52.0",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "typescript": "^6.0.3",
     "vite": "^7.3.6"
   }
