@@ -38,7 +38,7 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: pnpm/setup@v2
         with:
-          runtime: node@24
+          runtime: node@^24.15.0
           cache: true
           install: false
 
@@ -80,7 +80,7 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: pnpm/setup@v2
         with:
-          runtime: node@24
+          runtime: node@^24.15.0
           cache: true
           install: false
 
