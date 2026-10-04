@@ -8,7 +8,7 @@ on:
       - "scripts/compatibility/**"
       - ".prettierignore"
       - ".prettierrc"
-      - "eslint.config.js"
+      - ".oxlintrc.json"
       - "package.json"
       - "packages/demo/package.json"
       - "packages/demo/e2e/**"
