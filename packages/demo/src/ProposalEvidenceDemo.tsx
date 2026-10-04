@@ -14,14 +14,14 @@ import {
   $isReviewInsertionNode,
   $listReviewProposals,
   ReviewExtension,
-  type ReviewIntentOutcome,
+  type ReviewRoutedOutcome,
 } from "lexical-review";
 import {
   EVIDENCE_STATUS_TEXT,
   useProposalEvidence,
 } from "./useProposalEvidence";
 
-function describeOutcome(outcome: ReviewIntentOutcome): string {
+function describeOutcome(outcome: ReviewRoutedOutcome): string {
   switch (outcome.status) {
     case "changed":
       return "changed — the review state gained, extended, or settled a proposal";
@@ -44,7 +44,7 @@ export default function ProposalEvidenceDemo({
     editor,
     ReviewExtension,
   ).output;
-  const [outcome, setOutcome] = useState<ReviewIntentOutcome | null>(null);
+  const [outcome, setOutcome] = useState<ReviewRoutedOutcome | null>(null);
   const [outcomeCount, setOutcomeCount] = useState(0);
   const {
     evidence,
@@ -64,7 +64,7 @@ export default function ProposalEvidenceDemo({
   const factoryCounter = useRef(0);
   const factory = useCallback(() => `proposal-${++factoryCounter.current}`, []);
 
-  const handleOutcome = useCallback((next: ReviewIntentOutcome) => {
+  const handleOutcome = useCallback((next: ReviewRoutedOutcome) => {
     setOutcome(next);
     setOutcomeCount((count) => count + 1);
   }, []);

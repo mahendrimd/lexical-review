@@ -28,7 +28,7 @@ import {
 } from "./index";
 import {
   registerReviewSession,
-  type ReviewIntentOutcome,
+  type ReviewRoutedOutcome,
 } from "./registerReviewSession";
 import {
   paragraph,
@@ -118,7 +118,7 @@ function firstText(node: ElementNode): TextNode {
 function open(
   editor: LexicalEditor,
   input: unknown,
-  outcomes: ReviewIntentOutcome[] = [],
+  outcomes: ReviewRoutedOutcome[] = [],
   options: Parameters<typeof registerReviewSession>[2] = {},
 ) {
   const opened = openReviewSession(editor, input);
@@ -175,7 +175,7 @@ async function commitComposition(
 describe("composition normalization (#64)", () => {
   it("commits inline IME text as one insertion proposal", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -209,7 +209,7 @@ describe("composition normalization (#64)", () => {
 
   it("commits non-BMP emoji text with UTF-16-safe offsets", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -231,7 +231,7 @@ describe("composition normalization (#64)", () => {
 
   it("normalizes a commit over an accepted range into one replacement", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -264,7 +264,7 @@ describe("composition normalization (#64)", () => {
 
   it("treats an empty collapsed completion as unchanged without mutation", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -289,7 +289,7 @@ describe("composition normalization (#64)", () => {
 
   it("normalizes an empty commit over a range into one deletion", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -314,7 +314,7 @@ describe("composition normalization (#64)", () => {
 
   it("refuses a trailing-newline commit without mutation", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -344,7 +344,7 @@ describe("composition normalization (#64)", () => {
 
   it("continues a pending insertion under the same identity", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -378,7 +378,7 @@ describe("composition normalization (#64)", () => {
 
   it("corrects a fragment under the same identity without nesting", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -433,7 +433,7 @@ describe("composition normalization (#64)", () => {
 
   it("refuses composition inside pending formatting without mutation", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -468,7 +468,7 @@ describe("composition normalization (#64)", () => {
 
   it("commits composition at a proposal-adjacent element caret into the faced insertion", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -495,7 +495,7 @@ describe("composition normalization (#64)", () => {
 
   it("keeps intermediate controlled insertions as adapter state", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -522,7 +522,7 @@ describe("composition normalization (#64)", () => {
 
   it("claims Safari-style insertFromComposition plus compositionend once", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -555,7 +555,7 @@ describe("composition normalization (#64)", () => {
 
   it("leaves deletion routes unclaimed while composing", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -577,7 +577,7 @@ describe("composition normalization (#64)", () => {
 
   it("refuses factory failure without mutation", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -604,7 +604,7 @@ describe("composition normalization (#64)", () => {
 
   it("reports failed with snapshot recovery when the apply update throws", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -650,7 +650,7 @@ describe("composition normalization (#64)", () => {
 
   it("refuses resolution while composition is active", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -684,7 +684,7 @@ describe("composition normalization (#64)", () => {
 
   it("coexists with an independent split elsewhere", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")]), paragraph([text("CD")])]),

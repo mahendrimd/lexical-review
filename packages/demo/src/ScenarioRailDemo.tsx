@@ -24,7 +24,7 @@ import {
   $replaceReviewText,
   type ReviewProposalIdFactory,
   ReviewExtension,
-  type ReviewIntentOutcome,
+  type ReviewRoutedOutcome,
 } from "lexical-review";
 import {
   EVIDENCE_STATUS_TEXT,
@@ -73,7 +73,7 @@ const SCENARIOS: readonly ScenarioDef[] = [
   },
 ];
 
-function describeOutcome(outcome: ReviewIntentOutcome): string {
+function describeOutcome(outcome: ReviewRoutedOutcome): string {
   switch (outcome.status) {
     case "changed":
       return "changed — the review state gained, extended, or settled a proposal";
@@ -223,7 +223,7 @@ export default function ScenarioRailDemo({
     ReviewExtension,
   ).output;
   const [scenario, setScenario] = useState<ScenarioId>("r1");
-  const [outcome, setOutcome] = useState<ReviewIntentOutcome | null>(null);
+  const [outcome, setOutcome] = useState<ReviewRoutedOutcome | null>(null);
   const [outcomeCount, setOutcomeCount] = useState(0);
   const [normalization, setNormalization] = useState<string | null>(null);
   const [textFormat, setTextFormat] = useState({ bold: false, italic: false });
@@ -251,10 +251,13 @@ export default function ScenarioRailDemo({
   // pure; StrictMode double-invokes them).
   const scenarioRef = useRef<ScenarioId>("r1");
 
-  const handleOutcome = useCallback((next: ReviewIntentOutcome) => {
+  const handleOutcome = useCallback((next: ReviewRoutedOutcome) => {
     setOutcome(next);
     setOutcomeCount((count) => count + 1);
-    const value = (next as unknown as { value?: unknown }).value;
+    const value =
+      next.status === "changed" || next.status === "unchanged"
+        ? next.value
+        : undefined;
     if (
       value !== null &&
       typeof value === "object" &&

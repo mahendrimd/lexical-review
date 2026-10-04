@@ -150,5 +150,6 @@ export {
   INSERT_REVIEW_FRAGMENT_COMMAND,
   RESOLVE_REVIEW_PROPOSALS_COMMAND,
   type ReviewSessionRegistrationOptions,
+  type ReviewRoutedOutcome,
   type ReviewResolutionRoutePayload,
 } from "./registerReviewSession";

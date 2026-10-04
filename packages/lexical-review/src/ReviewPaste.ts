@@ -19,7 +19,10 @@
  * selection.
  */
 import type { ReviewAuthoringOptions } from "./ReviewAuthoring";
-import type { ReviewFormatRun } from "./ReviewFormattingState";
+import {
+  isSupportedFormat,
+  type ReviewFormatRun,
+} from "./ReviewFormattingState";
 import {
   refusal,
   type Preparation,
@@ -286,6 +289,25 @@ export function $applyPasteRuns(
   normalization: ReviewPasteNormalization,
   options: ReviewAuthoringOptions = {},
 ): ReviewPasteOutcome {
+  if (!Array.isArray(runs))
+    return refusal("unsupported-input", "Paste runs must be an array.");
+  for (const run of runs) {
+    if (run === null || typeof run !== "object" || typeof run.text !== "string")
+      return refusal(
+        "unsupported-input",
+        "Each paste run must contain text and a supported inline format.",
+      );
+    if (!isSupportedFormat(run.format))
+      return refusal(
+        "unsupported-formatting",
+        "Paste runs support bold, italic, strikethrough, and underline formats only.",
+      );
+    if (containsLineBreak(run.text))
+      return refusal(
+        "unsupported-input",
+        "Paste runs support one paragraph without embedded line breaks.",
+      );
+  }
   const structural = validateStructuralState();
   if (structural !== null) return structural as ReviewPasteOutcome;
   if (runs.length === 0) return pasteUnchanged();
@@ -389,7 +411,8 @@ export function $dropReviewSelection(
       "Drop requires a drag event carrying readable clipboard data.",
     );
   }
-  const dropEffect = (event as { dropEffect?: unknown }).dropEffect;
+  const dropEffect = (event as { dataTransfer?: { dropEffect?: unknown } })
+    .dataTransfer?.dropEffect;
   if (dropEffect !== "copy") {
     preventDefaultWhenPossible(event);
     return refusal(

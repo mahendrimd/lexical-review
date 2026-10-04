@@ -24,6 +24,7 @@ import {
   ReviewFormattingNode,
   ReviewInsertionNode,
   type ReviewIntentOutcome,
+  type ReviewRoutedOutcome,
   registerReviewSession,
   RESOLVE_REVIEW_PROPOSALS_COMMAND,
 } from "lexical-review";
@@ -55,7 +56,7 @@ export function RouteWiringFixture() {
       throw new Error("Invalid route-wiring fixture");
     let counter = 0;
     const factory = () => `route-wiring-${++counter}`;
-    let lastOutcome: ReviewIntentOutcome | null = null;
+    let lastOutcome: ReviewRoutedOutcome | null = null;
     let outcomeCount = 0;
     const unregister = registerReviewSession(editor, opened.value, {
       proposalIdFactory: factory,

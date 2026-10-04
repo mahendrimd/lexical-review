@@ -38,7 +38,7 @@ import {
 } from "./index";
 import {
   registerReviewSession,
-  type ReviewIntentOutcome,
+  type ReviewRoutedOutcome,
 } from "./registerReviewSession";
 import {
   paragraph,
@@ -93,7 +93,7 @@ function liveSelection() {
 function open(
   editor: LexicalEditor,
   input: unknown,
-  outcomes: ReviewIntentOutcome[] = [],
+  outcomes: ReviewRoutedOutcome[] = [],
   options: Parameters<typeof registerReviewSession>[2] = {},
 ) {
   const opened = openReviewSession(editor, input);
@@ -128,9 +128,9 @@ function dropEvent(html: string, plain: string, dropEffect: string) {
     clientX: 0,
     clientY: 0,
     dataTransfer: {
+      dropEffect,
       getData: (type: string) => (type === "text/html" ? html : plain),
     },
-    dropEffect,
   } as unknown as DragEvent;
   return { event, preventDefault };
 }
@@ -405,7 +405,7 @@ describe("review multiline normalization", () => {
 describe("review multiline paste placement", () => {
   it("pastes into the middle of an accepted paragraph as Ax/yB", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const { event, preventDefault } = pasteEvent("", "x\ny");
@@ -419,7 +419,7 @@ describe("review multiline paste placement", () => {
 
   it("pastes at the end of a paragraph without merging into the next one", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("A", "B"), outcomes);
     await selectCaret(editor, 0, 1);
     const { event } = pasteEvent("", "x\ny");
@@ -431,7 +431,7 @@ describe("review multiline paste placement", () => {
 
   it("pastes at a paragraph start and into an empty paragraph", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 0);
     expect(
@@ -440,7 +440,7 @@ describe("review multiline paste placement", () => {
     expect(contentsOf(editor)).toEqual(["x", "yAB"]);
 
     const empty = createMultilineEditor();
-    const emptyOutcomes: ReviewIntentOutcome[] = [];
+    const emptyOutcomes: ReviewRoutedOutcome[] = [];
     open(empty, acceptedDoc(""), emptyOutcomes);
     await update(empty, () => {
       $getRoot().getFirstChildOrThrow().select(0, 0);
@@ -455,7 +455,7 @@ describe("review multiline paste placement", () => {
   it("resolves the whole fragment atomically and round trips through save/reload", async () => {
     for (const action of ["accept", "reject"] as const) {
       const editor = createMultilineEditor();
-      const outcomes: ReviewIntentOutcome[] = [];
+      const outcomes: ReviewRoutedOutcome[] = [];
       const { session } = open(editor, acceptedDoc("AB"), outcomes);
       await selectCaret(editor, 0, 1);
       expect(
@@ -479,7 +479,7 @@ describe("review multiline paste placement", () => {
 
   it("classifies a lone boundary as a split and keeps multiple boundaries atomic", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     expect(
@@ -493,7 +493,7 @@ describe("review multiline paste placement", () => {
     });
 
     const multi = createMultilineEditor();
-    const multiOutcomes: ReviewIntentOutcome[] = [];
+    const multiOutcomes: ReviewRoutedOutcome[] = [];
     open(multi, acceptedDoc("AB"), multiOutcomes);
     await selectCaret(multi, 0, 1);
     expect(
@@ -510,7 +510,7 @@ describe("review multiline paste placement", () => {
 describe("review multiline paste ownership", () => {
   it("corrects a fragment in place under the same identity", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     expect(
@@ -533,7 +533,7 @@ describe("review multiline paste ownership", () => {
 
   it("replaces a range wholly owned by one fragment under the same identity", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     expect(
@@ -555,7 +555,7 @@ describe("review multiline paste ownership", () => {
 
   it("refuses mixed-ownership ranges without mutation", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     expect(
@@ -577,7 +577,7 @@ describe("review multiline paste ownership", () => {
 
   it("refuses non-collapsed replacement outside one fragment", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectAcross(editor, 0, 0, 0, 2);
     const before = editor.getEditorState().toJSON();
@@ -591,7 +591,7 @@ describe("review multiline paste ownership", () => {
 
   it("refuses multiline paste inside other pending proposal kinds", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(
       editor,
       reviewDocument([
@@ -612,7 +612,7 @@ describe("review multiline paste ownership", () => {
 
   it("treats empty paste over a selection as a no-op without deletion", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     expect(
@@ -634,7 +634,7 @@ describe("review multiline paste ownership", () => {
 
   it("refuses malformed paste events without mutation", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const before = editor.getEditorState().toJSON();
@@ -654,7 +654,7 @@ describe("review multiline paste ownership", () => {
 describe("review multiline paste caret and routes", () => {
   it("continues the fragment on proposal-side typing and separates accepted-side deletion", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     expect(
@@ -679,7 +679,7 @@ describe("review multiline paste caret and routes", () => {
 
   it("applies copy-style drop through the same fragment path and refuses move", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const { event, preventDefault } = dropEvent("", "x\ny", "copy");
@@ -689,7 +689,7 @@ describe("review multiline paste caret and routes", () => {
     expect(contentsOf(editor)).toEqual(["Ax", "yB"]);
 
     const mover = createMultilineEditor();
-    const moverOutcomes: ReviewIntentOutcome[] = [];
+    const moverOutcomes: ReviewRoutedOutcome[] = [];
     open(mover, acceptedDoc("AB"), moverOutcomes);
     await selectCaret(mover, 0, 1);
     const before = mover.getEditorState().toJSON();
@@ -704,7 +704,7 @@ describe("review multiline paste caret and routes", () => {
 
   it("claims each physical paste once across paste and beforeinput routes", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     expect(
@@ -723,7 +723,7 @@ describe("review multiline paste caret and routes", () => {
 
   it("pastes foreign review markup with one fresh native identity", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     const { event } = pasteEvent(
@@ -741,7 +741,7 @@ describe("review multiline paste caret and routes", () => {
 
   it("keeps accepted-state preview free of the fragment without resolving it", async () => {
     const editor = createMultilineEditor();
-    const outcomes: ReviewIntentOutcome[] = [];
+    const outcomes: ReviewRoutedOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
     expect(
