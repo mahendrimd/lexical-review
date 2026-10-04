@@ -1,3 +1,4 @@
+import * as review from "lexical-review";
 import {
   openReviewSession,
   type ReviewDocumentV3,
@@ -169,3 +170,67 @@ void session;
 void saved;
 void closed;
 void register;
+
+// Host consumers can use compact proposal records and detached snapshots.
+function proposalSummary(): string | null {
+  const result = editor.read(() => review.$inspectReviewProposal("consumer"));
+  if (result.status !== "unchanged" && result.status !== "changed") return null;
+  const inspected: review.InspectedReviewProposal = result.value;
+  switch (inspected.kind) {
+    case "insertion": {
+      const proposal: review.ReviewInsertionProposal = inspected.proposal;
+      return proposal.text;
+    }
+    case "deletion": {
+      const proposal: review.ReviewDeletionProposal = inspected.proposal;
+      return proposal.text;
+    }
+    case "replacement": {
+      const proposal: review.ReviewReplacementProposal = inspected.proposal;
+      return proposal.oldText + proposal.newText;
+    }
+    case "formatting": {
+      const proposal: review.ReviewFormattingProposal = inspected.proposal;
+      return proposal.current.map((run) => run.text).join("");
+    }
+    case "structure": {
+      const proposal: review.ReviewStructuralProposal = inspected.proposal;
+      return proposal.kind;
+    }
+    case "fragment": {
+      const proposal: review.ReviewFragmentProposal = inspected.proposal;
+      return proposal.paragraphs
+        .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
+        .join("\n");
+    }
+    default: {
+      const exhaustive: never = inspected;
+      return exhaustive;
+    }
+  }
+}
+
+function selectedProposal(): review.ReviewProposalSnapshot | null {
+  const ids = editor.read(review.$listReviewProposals);
+  const next: string | null = review.getNextProposal(ids, null);
+  const previous: string | null = review.getPrevProposal(ids, next);
+  void previous;
+  if (next === null) return null;
+  const inspected = editor.read(() =>
+    review.$inspectReviewProposalSnapshot(next),
+  );
+  return inspected.status === "ready" ? inspected.value : null;
+}
+
+function pasteForHost(event: unknown): review.ReviewMultilinePasteOutcome {
+  return review.$pasteReviewSelection(event);
+}
+
+const mergeCompatibility: (
+  left: review.ReviewElementNode,
+  right: review.ReviewElementNode,
+) => boolean = review.$canReviewElementNodesBeMerged;
+void proposalSummary;
+void selectedProposal;
+void pasteForHost;
+void mergeCompatibility;

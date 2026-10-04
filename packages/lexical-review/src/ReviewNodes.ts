@@ -236,6 +236,11 @@ export function $isReviewDeletionNode(
   return node instanceof ReviewDeletionNode;
 }
 
+/**
+ * Compare wrapper kind, proposal identity, and extension ownership for
+ * normalization. Formatting and fragment wrappers always remain separate.
+ * Callers must also check placement and preserve selection when merging.
+ */
 export function $canReviewElementNodesBeMerged(
   node1: ReviewElementNode,
   node2: ReviewElementNode,

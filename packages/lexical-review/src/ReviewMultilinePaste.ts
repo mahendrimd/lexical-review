@@ -34,20 +34,13 @@ import {
   splitPlainText,
   type ReviewClipboardNormalization,
 } from "./ReviewClipboardIntake";
-import {
-  refusal,
-  type Preparation,
-  type ReviewIntentError,
-  type ReviewIntentRefusal,
-} from "./ReviewIntent";
+import { refusal, type Preparation } from "./ReviewIntent";
+import type { ReviewPasteOutcome } from "./ReviewPaste";
 
 export type ReviewMultilinePasteNormalization = ReviewClipboardNormalization;
 
-export type ReviewMultilinePasteOutcome =
-  | Readonly<{ status: "changed"; value: ReviewMultilinePasteNormalization }>
-  | Readonly<{ status: "unchanged"; value: undefined }>
-  | ReviewIntentRefusal
-  | Readonly<{ error: ReviewIntentError; status: "failed" }>;
+/** Multiline paste uses the shared clipboard application outcome. */
+export type ReviewMultilinePasteOutcome = ReviewPasteOutcome;
 
 export type ReviewMultilinePastePreparation = Preparation<{
   fragment: ReviewFragment;
