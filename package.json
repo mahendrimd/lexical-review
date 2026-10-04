@@ -6,10 +6,10 @@
   "license": "MIT",
   "private": true,
   "description": "A repo to lexical-review",
-  "packageManager": "pnpm@11.28.2",
+  "packageManager": "pnpm@12.9.0",
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
-    "pnpm": ">=11 <12"
+    "pnpm": ">=12 <13"
   },
   "main": "dist/src/index.js",
   "scripts": {
