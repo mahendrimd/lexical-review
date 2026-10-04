@@ -47,7 +47,7 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.11.0",
     "jsdom": "^27.3.0",
-    "nx": "^22.2.5",
+    "nx": "^22.7.12",
     "prettier": "^3.9.6",
     "semver": "^7.8.5",
     "typescript": "^6.0.3",
