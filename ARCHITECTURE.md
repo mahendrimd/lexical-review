@@ -28,7 +28,7 @@ abstractions for demonstrated needs.
 
 Lexical provides the editor tree, selection, read/update transactions, and
 browser command handling. The following sections connect the domain terms in
-[CONTEXT.md](CONTEXT.md) to these implementation facilities.
+[GLOSSARY.md](GLOSSARY.md) to these implementation facilities.
 
 ### Review state and authoring session
 
@@ -295,6 +295,6 @@ Before changing library code, work through this checklist:
 Do not add a parallel identity scheme beside proposal IDs, a verbatim clipboard marker mode, resolution history in review documents, or cross-update prepared state. Internal helpers and file layout may be rewritten when the observable contracts remain intact. A change to a guarantee requires an explicit contract decision; a consequential lasting tradeoff belongs in an ADR.
 
 Maintain this page when ownership, state authority, or lifecycle guarantees
-change. Keep vocabulary in [CONTEXT.md](CONTEXT.md), exact fields in types, and
+change. Keep vocabulary in [GLOSSARY.md](GLOSSARY.md), exact fields in types, and
 proposal behavior in its contract and tests. Update links when
 moving their targets; ordinary helper refactors need no architecture narrative.

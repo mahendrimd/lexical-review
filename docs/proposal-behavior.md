@@ -1,6 +1,6 @@
 # Revision proposal behavior
 
-This contract uses the terms in [CONTEXT.md](../CONTEXT.md) to describe proposal
+This contract uses the terms in [GLOSSARY.md](../GLOSSARY.md) to describe proposal
 ownership, editing, and resolution. The [architecture](../ARCHITECTURE.md)
 explains how the package implements these behaviors. Exact selection edge cases
 remain in the linked tests; internal helpers may change while outcomes stay stable.

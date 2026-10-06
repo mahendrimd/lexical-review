@@ -38,4 +38,4 @@ For issue triage or label changes, follow `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Before exploring or changing code, read root `CONTEXT.md` and the ADRs that touch the area. Follow `docs/agents/domain.md`.
+Before exploring or changing code, read root `GLOSSARY.md` and the ADRs that touch the area. Follow `docs/agents/domain.md`.
