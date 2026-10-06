@@ -36,7 +36,7 @@ review interactions before integrating them into your application.
 | Integrate review mode into an application | [Package guide](packages/lexical-review/README.md) — installation, session lifecycle, and API usage     |
 | Understand what editing and resolution do | [Proposal behavior](docs/proposal-behavior.md) — proposal kinds, editing rules, and observable outcomes |
 | Understand or change the implementation   | [Architecture](ARCHITECTURE.md) — state ownership, interaction lifecycle, and guarantees                |
-| Clarify a domain term                     | [Vocabulary](CONTEXT.md) — shared definitions and distinctions                                          |
+| Clarify a domain term                     | [Vocabulary](GLOSSARY.md) — shared definitions and distinctions                                          |
 | Work with WER interchange                 | [Interchange package](packages/lexical-review-wer/README.md) — current export boundary and limitations  |
 | Understand a recorded design decision     | [Architecture decisions](docs/adr/) — lasting choices and their rationale                               |
 
