@@ -63,15 +63,18 @@ export function ScenarioRailFixture() {
             document: exportReviewDocument(editor.getEditorState()),
           };
         });
-        const activeRail = document.querySelector(
+        const activeScenario = document.querySelector(
           '[data-testid="scenario-item"][aria-pressed="true"]',
         );
         return {
           ...state,
-          scenario: activeRail?.getAttribute("data-scenario") ?? null,
+          scenario: activeScenario?.getAttribute("data-scenario") ?? null,
           outcome: readDomText("outcome-pane"),
           normalization: readDomText("normalization-report"),
-          evidenceStatus: readDomText("evidence-status"),
+          evidenceStatus:
+            document
+              .querySelector('[data-testid="document-previews"]')
+              ?.getAttribute("data-preview-status") ?? null,
         };
       },
     };

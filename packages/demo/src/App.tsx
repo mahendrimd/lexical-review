@@ -27,9 +27,10 @@ function App() {
   return (
     <div className="demo-app">
       <header className="site-header">
-        <a className="wordmark" href="#">
-          lexical-review
-        </a>
+        <div>
+          <h1>lexical-review</h1>
+          <p>Edit text as proposals, then accept or reject them.</p>
+        </div>
         <nav aria-label="Resources">
           <a
             href={AUTHORING_DOCS_URL}
@@ -48,18 +49,6 @@ function App() {
           </a>
         </nav>
       </header>
-      <div className="intro">
-        <p className="eyebrow">An interactive introduction</p>
-        <h1>Make edits. Keep the decision open.</h1>
-        <p>
-          lexical-review turns edits in a Lexical editor into proposals you can
-          accept, reject, or keep refining. Try a change below and see how it
-          affects the document.
-        </p>
-        <a className="start-link" href="#try-it-live">
-          Start with a text suggestion ↓
-        </a>
-      </div>
       <LexicalExtensionComposer
         extension={editorExtension}
         contentEditable={null}

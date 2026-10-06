@@ -23,6 +23,40 @@ export interface GeneratedEvidence {
   nativeJson: string;
 }
 
+interface ProposalSummary {
+  id: string;
+  kind: string;
+  title: string;
+}
+
+function quoteText(text: string): string {
+  const characters = Array.from(text.replace(/\n/g, " ↵ "));
+  return `“${characters.slice(0, 60).join("")}${characters.length > 60 ? "…" : ""}”`;
+}
+
+function describeProposal(proposal: ReviewProposalSnapshot): string {
+  switch (proposal.kind) {
+    case "insertion":
+      return `Insert ${quoteText(proposal.content.text)}`;
+    case "deletion":
+      return `Delete ${quoteText(proposal.content.text)}`;
+    case "replacement":
+      return `Replace ${quoteText(proposal.content.oldText)} with ${quoteText(proposal.content.newText)}`;
+    case "formatting":
+      return `Change formatting of ${quoteText(proposal.content.accepted.map((run) => run.text).join(""))}`;
+    case "split":
+      return `Split before paragraph ${proposal.attachment.paragraphIndex + 1}`;
+    case "merge":
+      return `Merge into paragraph ${proposal.attachment.paragraphIndex + 1}`;
+    case "fragment": {
+      const paragraphs = proposal.content.paragraphs.map((paragraph) =>
+        paragraph.runs.map((run) => run.text).join(""),
+      );
+      return `Insert ${paragraphs.length} paragraph${paragraphs.length === 1 ? "" : "s"}: ${quoteText(paragraphs.join("\n"))}`;
+    }
+  }
+}
+
 export const EVIDENCE_STATUS_TEXT: Record<EvidenceStatus, string> = {
   "not-generated": "Not generated",
   current: "Current",
@@ -56,13 +90,13 @@ export interface ProposalEvidenceState {
   selectedActive: boolean;
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
-  summaries: readonly { id: string; kind: string }[];
+  summaries: readonly ProposalSummary[];
 }
 
 /**
  * Shared #77 semantic-evidence behavior for the capability demos: separate
  * `selectedId` (list click selects; typing follows the caret, never
- * `selectedId`), Accept/Reject/Remove targeting only `selectedId`,
+ * `selectedId`), resolution targeting the requested proposal ID,
  * inspection that never moves caret/focus/scroll, freshness
  * `Not generated` / `Stale` / `Unavailable` / `Current`, single-snapshot
  * Generate, selection-only changes never marking stale, and preview errors
@@ -74,9 +108,7 @@ export function useProposalEvidence(
   const [docVersion, setDocVersion] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
   const [proposals, setProposals] = useState<readonly string[]>([]);
-  const [summaries, setSummaries] = useState<
-    readonly { id: string; kind: string }[]
-  >([]);
+  const [summaries, setSummaries] = useState<readonly ProposalSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inspection, setInspection] = useState<ProposalInspection | null>(null);
   const [evidence, setEvidence] = useState<GeneratedEvidence | null>(null);
@@ -124,6 +156,10 @@ export function useProposalEvidence(
           return {
             id,
             kind: found.status === "ready" ? found.value.kind : found.code,
+            title:
+              found.status === "ready"
+                ? describeProposal(found.value)
+                : "Proposal details unavailable",
           };
         }),
       );

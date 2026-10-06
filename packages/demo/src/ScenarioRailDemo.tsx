@@ -22,56 +22,74 @@ import {
   $insertReviewText,
   $isReviewInsertionNode,
   $replaceReviewText,
+  exportReviewDocument,
   type ReviewProposalIdFactory,
+  type ProposalResolutionAction,
   ReviewExtension,
   type ReviewRoutedOutcome,
+  type ReviewRoutedOperation,
 } from "lexical-review";
-import {
-  EVIDENCE_STATUS_TEXT,
-  useProposalEvidence,
-} from "./useProposalEvidence";
+import { useProposalEvidence } from "./useProposalEvidence";
 
-type ScenarioId = "r1" | "r2" | "r3" | "n1" | "n2" | "m1" | "n3" | "n4";
-
-interface ScenarioDef {
-  id: ScenarioId;
-  label: string;
-}
-
-const SCENARIOS: readonly ScenarioDef[] = [
+const SCENARIOS = [
   {
     id: "r1",
     label: "Suggest text",
+    description:
+      "Insert x between A and B, then continue with y. Both edits form one proposal. You can also type in the document.",
   },
   {
     id: "r2",
     label: "Revise a suggestion",
+    description:
+      "The suggestion xy is already pending. Add z to revise it, then decide whether to keep it.",
   },
   {
     id: "r3",
     label: "Edit beside pending work",
+    description:
+      "Delete the pending X beside accepted text AB. The suggestion disappears; AB stays intact.",
   },
   {
     id: "n1",
     label: "Replace text",
+    description:
+      "Change cat to bat. The deleted c and inserted b are reviewed together.",
   },
   {
     id: "n2",
     label: "Split a paragraph",
+    description:
+      "Split AB into two paragraphs. Accept keeps the split; reject rejoins the text.",
   },
   {
     id: "m1",
     label: "Merge paragraphs",
+    description:
+      "Join the two paragraphs. Accept keeps the merge; reject restores the paragraph break.",
   },
   {
     id: "n3",
     label: "Paste paragraphs",
+    description:
+      "Insert x and y as two paragraphs. This simulated paste creates one proposal for the whole fragment.",
   },
   {
     id: "n4",
     label: "Compose text",
+    description:
+      "Commit あ as one text suggestion. Use the simulated input or try your own input method in the document.",
   },
-];
+] as const;
+
+type ScenarioId = (typeof SCENARIOS)[number]["id"];
+
+interface ScenarioAction {
+  testId: string;
+  label: string;
+  run: () => void;
+  disabled?: boolean;
+}
 
 function describeOutcome(outcome: ReviewRoutedOutcome): string {
   switch (outcome.status) {
@@ -153,64 +171,23 @@ function setupScenarioDocument(
   }
 }
 
-function CheckIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M2.5 7.5 5.5 10.5 11.5 3.5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function CrossIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M3.5 3.5l7 7M10.5 3.5l-7 7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M2.5 3.5h9M5.5 3.5V2.6c0-.3.3-.6.6-.6h1.8c.3 0 .6.3.6.6v.9M4.2 3.5l.6 7c.1.8.7 1.4 1.4 1.4h1.6c.7 0 1.3-.6 1.4-1.4l.6-7M6 6.5v3.5M8 6.5v3.5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+const DECISIONS = [
+  {
+    action: "accept",
+    label: "Accept",
+    description: "keeps the change",
+  },
+  {
+    action: "reject",
+    label: "Reject",
+    description: "declines the change",
+  },
+  {
+    action: "remove",
+    label: "Remove",
+    description: "lets its author withdraw it",
+  },
+] as const;
 
 export default function ScenarioRailDemo({
   onEditorReady,
@@ -228,7 +205,13 @@ export default function ScenarioRailDemo({
   const [normalization, setNormalization] = useState<string | null>(null);
   const [textFormat, setTextFormat] = useState({ bold: false, italic: false });
   const [refusedFlash, setRefusedFlash] = useState(false);
+  const [lastResolution, setLastResolution] =
+    useState<ProposalResolutionAction | null>(null);
+  const [lastOperation, setLastOperation] =
+    useState<ReviewRoutedOperation | null>(null);
+  const resolutionActionRef = useRef<ProposalResolutionAction | null>(null);
   const {
+    docVersion,
     evidence,
     evidenceReason,
     evidenceStatus,
@@ -244,30 +227,72 @@ export default function ScenarioRailDemo({
     summaries,
   } = useProposalEvidence(editor);
 
+  const [documentSnapshot, setDocumentSnapshot] = useState<{
+    version: number;
+    json: string;
+  } | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const captureDocument = useCallback(() => {
+    if (isComposing) return;
+    const result = exportReviewDocument(editor.getEditorState());
+    if (result.status === "valid") {
+      setDocumentSnapshot({
+        version: docVersion,
+        json: JSON.stringify(result.value, null, 2),
+      });
+      setSnapshotError(null);
+    } else {
+      setSnapshotError(
+        "The review document could not be captured. Reset the example and try again.",
+      );
+    }
+  }, [editor, docVersion, isComposing]);
+
   const factoryCounter = useRef(0);
   const factory = useCallback(() => `scenario-${++factoryCounter.current}`, []);
-  // Guard against re-activating the already-selected rail item without
+  // Guard against re-activating the already-selected example without
   // performing editor work inside a React state updater (updaters must stay
   // pure; StrictMode double-invokes them).
   const scenarioRef = useRef<ScenarioId>("r1");
 
-  const handleOutcome = useCallback((next: ReviewRoutedOutcome) => {
-    setOutcome(next);
-    setOutcomeCount((count) => count + 1);
-    const value =
-      next.status === "changed" || next.status === "unchanged"
-        ? next.value
-        : undefined;
-    if (
-      value !== null &&
-      typeof value === "object" &&
-      "source" in value &&
-      "flattened" in value &&
-      "softBreakConverted" in value
-    ) {
-      setNormalization(JSON.stringify(value));
-    }
-  }, []);
+  const handleOutcome = useCallback(
+    (next: ReviewRoutedOutcome, operation?: ReviewRoutedOperation) => {
+      setOutcome(next);
+      setLastOperation(operation ?? null);
+      setLastResolution(
+        next.status === "changed" ? resolutionActionRef.current : null,
+      );
+      setOutcomeCount((count) => count + 1);
+      const value =
+        next.status === "changed" || next.status === "unchanged"
+          ? next.value
+          : undefined;
+      if (
+        value !== null &&
+        typeof value === "object" &&
+        "source" in value &&
+        "flattened" in value &&
+        "softBreakConverted" in value
+      ) {
+        setNormalization(JSON.stringify(value));
+      }
+    },
+    [],
+  );
+
+  const decideProposal = useCallback(
+    (id: string, action: ProposalResolutionAction) => {
+      // The command reports its outcome synchronously. Record the action only
+      // when it succeeds, and discard it on the next edit or scenario reset.
+      resolutionActionRef.current = action;
+      try {
+        resolveProposal(id, action);
+      } finally {
+        resolutionActionRef.current = null;
+      }
+    },
+    [resolveProposal],
+  );
 
   useEffect(() => {
     review.options.value = {
@@ -328,13 +353,17 @@ export default function ScenarioRailDemo({
     setOutcomeCount(0);
     setNormalization(null);
     setRefusedFlash(false);
+    setLastResolution(null);
+    setLastOperation(null);
+    setDocumentSnapshot(null);
+    setSnapshotError(null);
     resetEvidence();
   }, [resetEvidence]);
 
   /**
    * Selecting a different scenario loads its pinned starting document and
    * discards selection, inspection, the previous outcome, and generated
-   * evidence. Activating the already-selected rail item is a no-op and never
+   * evidence. Activating the already-selected example is a no-op and never
    * resets edits. Loading restores the pinned caret without reporting a
    * user-operation outcome.
    */
@@ -432,7 +461,7 @@ export default function ScenarioRailDemo({
     editor.update(
       () => {
         $getRoot().getAllTextNodes()[0]?.select(2, 2);
-        handleOutcome($deleteReviewText(false, {}));
+        handleOutcome($deleteReviewText(false, {}), "delete-text");
       },
       { discrete: true },
     );
@@ -512,35 +541,114 @@ export default function ScenarioRailDemo({
     [editor],
   );
 
-  const activeScenario = SCENARIOS.find((entry) => entry.id === scenario);
+  const hasInsertion = summaries.some(
+    (summary) => summary.kind === "insertion",
+  );
+  const activeScenario =
+    SCENARIOS.find((entry) => entry.id === scenario) ?? SCENARIOS[0];
 
-  const feedbackText =
-    outcome === null
-      ? "Start with the first button above. Your change will appear in the document."
-      : outcome.status === "refused"
-        ? `This edit was refused. ${outcome.message} Your existing work is preserved.`
-        : proposals.length
-          ? `${proposals.length} pending proposal${proposals.length === 1 ? "" : "s"}. The change is visible, but has not been accepted.`
-          : "No pending proposals remain. Try the example again or explore the next capability.";
+  const pendingFeedback = proposals.length
+    ? `${proposals.length} pending proposal${proposals.length === 1 ? "" : "s"} remain${proposals.length === 1 ? "s" : ""}.`
+    : "No pending proposals remain.";
+  let feedbackText: string;
+  if (outcome?.status === "refused") {
+    feedbackText = `This edit was refused. ${outcome.message} Your existing work is preserved.`;
+  } else if (outcome?.status === "failed") {
+    feedbackText = `This edit could not be completed. ${outcome.error.message}`;
+  } else if (lastResolution !== null) {
+    const verb = { accept: "accepted", reject: "rejected", remove: "removed" }[
+      lastResolution
+    ];
+    feedbackText = `Change ${verb}. ${pendingFeedback}`;
+  } else if (outcome === null) {
+    feedbackText = proposals.length
+      ? `${proposals.length} pending proposal${proposals.length === 1 ? " is" : "s are"} ready to edit or review.`
+      : "";
+  } else if (proposals.length) {
+    feedbackText = `${proposals.length} pending proposal${proposals.length === 1 ? "" : "s"}.`;
+  } else if (
+    scenario === "r3" &&
+    outcome.status === "changed" &&
+    lastOperation === "delete-text"
+  ) {
+    feedbackText =
+      "The pending text was deleted and its proposal removed. The accepted document is unchanged. No pending proposals remain.";
+  } else {
+    feedbackText = pendingFeedback;
+  }
 
-  const index = SCENARIOS.findIndex((entry) => entry.id === scenario);
-  const nextScenario = SCENARIOS[index + 1];
-  const explanations: Record<ScenarioId, string> = {
-    r1: "Start with AB. Insert x between the letters, then continue with y. Both keystrokes belong to one pending proposal; the accepted document stays AB until you accept it.",
-    r2: "This example starts with xy already suggested between A and B. Correct it by adding z. The proposal keeps its identity. Remove withdraws the author’s suggestion.",
-    r3: "A pending X sits after accepted text AB. Deleting forward from the accepted side shrinks that neighbor; emptying a single-character neighbor removes it.",
-    n1: "Change cat to bat. The deleted c and inserted b form one replacement proposal, so they are accepted or rejected together.",
-    n2: "Split AB between its letters. A paragraph boundary is a reviewable change too: accepting keeps the split; rejecting rejoins the text.",
-    m1: "Merge A and B at the paragraph boundary. The merge is a pending structural proposal: accepting keeps one paragraph; rejecting restores the boundary.",
-    n3: "Paste x and y as two paragraphs between A and B. The entire fragment is one proposal, reviewed as a whole. This button simulates a plain-text paste.",
-    n4: "Text composition can commit a complete character as one insertion proposal. This button simulates the commit; you can also try your own input method in the editor.",
+  const scenarioActions: Record<ScenarioId, readonly ScenarioAction[]> = {
+    r1: [
+      {
+        testId: "act-insert-x",
+        label: "Insert “x” between A and B",
+        run: () => insertAtPinnedCaret("x"),
+      },
+      {
+        testId: "act-insert-y",
+        label: "Continue with “y”",
+        disabled: !hasInsertion,
+        run: () => continueInsertion("y"),
+      },
+    ],
+    r2: [
+      {
+        testId: "act-correct-z",
+        label: "Add “z” to the suggestion",
+        disabled: !hasInsertion,
+        run: () => correctInsertionAt(1, "z"),
+      },
+    ],
+    r3: [
+      {
+        testId: "act-delete-forward",
+        label: "Delete the pending “X”",
+        disabled: !hasInsertion,
+        run: attemptAcceptedSideDeletion,
+      },
+    ],
+    n1: [
+      {
+        testId: "act-replace",
+        label: "Replace c with b",
+        run: replaceAtPinnedRange,
+      },
+    ],
+    n2: [
+      {
+        testId: "act-split",
+        label: "Split paragraph (Enter)",
+        run: splitAtPinnedCaret,
+      },
+    ],
+    m1: [
+      {
+        testId: "act-merge",
+        label: "Merge the paragraphs",
+        run: mergeAtPinnedBoundary,
+      },
+    ],
+    n3: [
+      {
+        testId: "act-paste",
+        label: "Paste two paragraphs",
+        run: simulateMultilinePaste,
+      },
+    ],
+    n4: [
+      {
+        testId: "act-compose",
+        label: "Commit “あ”",
+        run: simulateCompositionCommit,
+      },
+    ],
   };
 
   return (
     <div className="demo-layout">
-      <nav aria-label="Scenarios" className="lesson-nav">
-        <p className="eyebrow">Explore the capabilities</p>
-        <div data-testid="scenario-rail" className="lesson-list">
+      <nav aria-label="Capabilities" className="capability-rail">
+        <h2 className="rail-heading">Capabilities</h2>
+        <div data-testid="scenario-rail" className="capability-list">
           {SCENARIOS.map((entry, position) => (
             <button
               key={entry.id}
@@ -550,373 +658,298 @@ export default function ScenarioRailDemo({
               aria-pressed={entry.id === scenario}
               onClick={() => loadScenario(entry.id)}
             >
-              <span className="lesson-number">{position + 1}</span>
+              <span className="capability-number" aria-hidden="true">
+                {position + 1}
+              </span>
               {entry.label}
             </button>
           ))}
         </div>
-        <p className="nav-note">
-          Each example starts fresh. Switching examples resets edits.
-        </p>
+        <p className="nav-note">Switching examples resets edits.</p>
       </nav>
-      <main id="try-it-live" className="lesson" key={scenario}>
-        <header className="lesson-heading">
-          <h2>{activeScenario?.label}</h2>
-          <p>{explanations[scenario]}</p>
+      <main key={scenario}>
+        <header className="example-heading">
+          <h2>{activeScenario.label}</h2>
+          <p>{activeScenario.description}</p>
         </header>
-        <section aria-label="Scenario actions" className="try-section">
-          <h3>
-            <span className="step">1</span> Make a change
-          </h3>
-          <p className="helper">
-            Use an example button, or click in the document and type.
-          </p>
-          <div className="actions example-actions">
-            {scenario === "r1" ? (
-              <>
-                <button
-                  type="button"
-                  data-testid="act-insert-x"
-                  onClick={() => insertAtPinnedCaret("x")}
-                >
-                  Insert “x” between A and B
-                </button>
-                <button
-                  type="button"
-                  data-testid="act-insert-y"
-                  onClick={() => continueInsertion("y")}
-                >
-                  Continue with “y”
-                </button>
-              </>
-            ) : null}
-            {scenario === "r2" ? (
-              <button
-                type="button"
-                data-testid="act-correct-z"
-                onClick={() => correctInsertionAt(1, "z")}
-              >
-                Add “z” to the suggestion
-              </button>
-            ) : null}
-            {scenario === "r3" ? (
-              <button
-                type="button"
-                data-testid="act-delete-forward"
-                onClick={attemptAcceptedSideDeletion}
-              >
-                Try deleting across the boundary
-              </button>
-            ) : null}
-            {scenario === "n1" ? (
-              <button
-                type="button"
-                data-testid="act-replace"
-                onClick={replaceAtPinnedRange}
-              >
-                Replace c with b
-              </button>
-            ) : null}
-            {scenario === "n2" ? (
-              <button
-                type="button"
-                data-testid="act-split"
-                onClick={splitAtPinnedCaret}
-              >
-                Split paragraph (Enter)
-              </button>
-            ) : null}
-            {scenario === "m1" ? (
-              <button
-                type="button"
-                data-testid="act-merge"
-                onClick={mergeAtPinnedBoundary}
-              >
-                Merge the paragraphs
-              </button>
-            ) : null}
-            {scenario === "n3" ? (
-              <button
-                type="button"
-                data-testid="act-paste"
-                onClick={simulateMultilinePaste}
-              >
-                Paste two paragraphs (simulated)
-              </button>
-            ) : null}
-            {scenario === "n4" ? (
-              <button
-                type="button"
-                data-testid="act-compose"
-                onClick={simulateCompositionCommit}
-              >
-                Commit “あ” (simulated)
-              </button>
-            ) : null}
-          </div>
-          <section
-            aria-labelledby="scenario-editor-heading"
-            className="editor-sheet"
-          >
-            <div className="editor-caption">
-              <div className="editor-title">
-                <h4 id="scenario-editor-heading">YOUR DOCUMENT</h4>
-                <span className="review-mode-label">review mode is on</span>
-              </div>
-              <div className="editor-tools" aria-label="Editor tools">
-                <button
-                  type="button"
-                  className="format-button"
-                  data-testid="format-bold"
-                  aria-label="Bold"
-                  aria-pressed={textFormat.bold}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => toggleTextFormat("bold")}
-                >
-                  <strong aria-hidden="true">B</strong>
-                </button>
-                <button
-                  type="button"
-                  className="format-button"
-                  data-testid="format-italic"
-                  aria-label="Italic"
-                  aria-pressed={textFormat.italic}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => toggleTextFormat("italic")}
-                >
-                  <em aria-hidden="true">I</em>
-                </button>
-                <button
-                  type="button"
-                  className="reset-button"
-                  data-testid="reset-scenario"
-                  aria-label="Reset example"
-                  title="Reset example"
-                  onClick={resetScenario}
-                >
-                  <span aria-hidden="true">↻</span> Reset
-                </button>
-              </div>
-            </div>
-            <ContentEditable
-              data-testid="scenario-editor"
-              aria-label="Editable review document"
-              className="review-editor"
-            />
-            <p
-              className={`editor-status${refusedFlash ? " is-error" : ""}`}
-              role="status"
+        <section aria-label="Example actions" className="example-actions">
+          {scenarioActions[scenario].map((action) => (
+            <button
+              key={action.testId}
+              type="button"
+              data-testid={action.testId}
+              disabled={action.disabled}
+              onClick={action.run}
             >
-              {feedbackText}
-            </p>
-          </section>
-          <div className="editor-legend">
-            <span>
-              <ins>Inserted</ins> text is pending
-            </span>
-            <span>
-              <del>Deleted</del> text stays visible until resolved
-            </span>
-          </div>
+              {action.label}
+            </button>
+          ))}
         </section>
-        <section aria-label="Proposal list" className="review-section">
-          <h3>
-            <span className="step">2</span> Review the change
-          </h3>
-          <p className="helper">
-            Select a pending proposal below, then decide what to keep.
-          </p>
-          <div data-testid="proposal-list" className="proposal-list">
-            {proposals.length === 0 ? (
-              <p className="empty-state">
-                Your proposals will appear here when you make a change.
-              </p>
-            ) : (
-              summaries.map((summary, position) => (
-                <div
-                  key={summary.id}
-                  className={
-                    summary.id === selectedId
-                      ? "proposal-row is-selected"
-                      : "proposal-row"
-                  }
-                >
+        <div className="workspace">
+          <div className="edit-pane">
+            <section
+              aria-labelledby="scenario-editor-heading"
+              className="editor-sheet"
+            >
+              <div className="editor-caption">
+                <h3 id="scenario-editor-heading">Document</h3>
+                <div className="editor-tools" aria-label="Editor tools">
                   <button
                     type="button"
-                    data-testid="proposal-item"
-                    data-proposal-id={summary.id}
-                    aria-pressed={summary.id === selectedId}
-                    className="proposal-row-main"
-                    onClick={() => setSelectedId(summary.id)}
+                    data-testid="format-bold"
+                    aria-label="Bold"
+                    aria-pressed={textFormat.bold}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => toggleTextFormat("bold")}
                   >
-                    <span className="proposal-row-index">{position + 1}</span>
-                    <span className="proposal-kind" data-kind={summary.kind}>
-                      {summary.kind}
-                    </span>
-                    <span className="proposal-row-title">
-                      Change {position + 1}
-                    </span>
+                    <strong aria-hidden="true">B</strong>
                   </button>
-                  <div
-                    className="proposal-row-decisions"
-                    role="group"
-                    aria-label={`Decide Change ${position + 1}`}
+                  <button
+                    type="button"
+                    data-testid="format-italic"
+                    aria-label="Italic"
+                    aria-pressed={textFormat.italic}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => toggleTextFormat("italic")}
                   >
-                    <button
-                      type="button"
-                      title="Accept — keeps the change"
-                      aria-label={`Accept Change ${position + 1}`}
-                      data-testid="accept-proposal"
-                      data-proposal-id={summary.id}
-                      className="decision-button decision-accept"
-                      onClick={() => resolveProposal(summary.id, "accept")}
-                    >
-                      <CheckIcon />
-                    </button>
-                    <button
-                      type="button"
-                      title="Reject — sets it aside"
-                      aria-label={`Reject Change ${position + 1}`}
-                      data-testid="reject-proposal"
-                      data-proposal-id={summary.id}
-                      className="decision-button decision-reject"
-                      onClick={() => resolveProposal(summary.id, "reject")}
-                    >
-                      <CrossIcon />
-                    </button>
-                    <button
-                      type="button"
-                      title="Remove — lets its author withdraw it"
-                      aria-label={`Remove Change ${position + 1}`}
-                      data-testid="remove-proposal"
-                      data-proposal-id={summary.id}
-                      className="decision-button decision-remove"
-                      onClick={() => resolveProposal(summary.id, "remove")}
-                    >
-                      <TrashIcon />
-                    </button>
+                    <em aria-hidden="true">I</em>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="reset-scenario"
+                    aria-label="Reset example"
+                    title="Reset example"
+                    onClick={resetScenario}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+              <ContentEditable
+                data-testid="scenario-editor"
+                aria-label="Editable review document"
+                className="review-editor"
+              />
+              {feedbackText && (
+                <p
+                  className={`editor-status${refusedFlash ? " is-error" : ""}`}
+                  role="status"
+                >
+                  {feedbackText}
+                </p>
+              )}
+            </section>
+            <div className="editor-legend">
+              <ins>Insertion</ins>
+              <del>Deletion</del>
+            </div>
+          </div>
+          <div className="review-sidebar" data-testid="review-sidebar">
+            <section
+              aria-labelledby="preview-heading"
+              className="preview-section"
+              data-testid="document-previews"
+              data-preview-status={evidenceStatus}
+            >
+              <div className="section-toolbar">
+                <h3 id="preview-heading">Document previews</h3>
+                <button
+                  type="button"
+                  data-testid="generate-evidence"
+                  disabled={isComposing}
+                  onClick={generateEvidence}
+                >
+                  {evidence === null ? "Show previews" : "Update previews"}
+                </button>
+              </div>
+              <p className="helper">Previews leave proposals unchanged.</p>
+              {evidenceReason !== null && (
+                <p
+                  className="helper"
+                  data-testid="evidence-reason"
+                  aria-live="polite"
+                >
+                  {isComposing
+                    ? "Finish composing text before showing previews."
+                    : evidenceReason}
+                </p>
+              )}
+              {evidenceStatus === "stale" && (
+                <p
+                  className="helper freshness-message"
+                  data-testid="preview-feedback"
+                  aria-live="polite"
+                >
+                  These previews are out of date. Update them to include your
+                  latest changes.
+                </p>
+              )}
+              {evidence !== null && (
+                <div data-testid="evidence-pane" className="comparison">
+                  <div>
+                    <h4>Accepted document</h4>
+                    <pre data-testid="accepted-preview">
+                      {evidence.accepted.join("\n")}
+                    </pre>
+                  </div>
+                  <div>
+                    <h4>With all proposals accepted</h4>
+                    <pre data-testid="all-accepted-preview">
+                      {evidence.allAccepted.join("\n")}
+                    </pre>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-          <p className="helper">
-            Accept keeps the change. Reject sets it aside. Remove lets its
-            author withdraw it.
-          </p>
-        </section>
-        <section aria-label="Document evidence" className="preview-section">
-          <h3>
-            <span className="step">3</span> Compare the outcomes
-          </h3>
-          <p className="helper">
-            Preview the accepted document and what it would become if every
-            pending proposal were accepted. Previewing does not resolve changes.
-          </p>
-          <div className="actions">
-            <button
-              type="button"
-              data-testid="generate-evidence"
-              disabled={isComposing}
-              onClick={generateEvidence}
+              )}
+            </section>
+            <section
+              aria-labelledby="review-heading"
+              className="review-section"
             >
-              {evidence === null
-                ? "Compare document versions"
-                : "Refresh comparison"}
-            </button>
-            <span data-testid="evidence-status">
-              {EVIDENCE_STATUS_TEXT[evidenceStatus]}
-            </span>
-          </div>
-          {evidenceReason !== null && (
-            <p data-testid="evidence-reason">{evidenceReason}</p>
-          )}
-          {evidenceStatus === "stale" && (
-            <p className="helper">
-              The document has changed. Refresh to compare the latest version.
-            </p>
-          )}
-          {evidence !== null && (
-            <div data-testid="evidence-pane" className="comparison">
-              <div>
-                <h4>Accepted document</h4>
-                <p className="helper">Without pending changes</p>
-                <pre data-testid="accepted-preview">
-                  {evidence.accepted.join("\n")}
-                </pre>
+              <h3 id="review-heading">Review proposals</h3>
+              <div data-testid="proposal-list" className="proposal-list">
+                {proposals.length === 0 ? (
+                  <p className="empty-state">
+                    {outcome === null
+                      ? "Make an edit to create a proposal."
+                      : "No pending proposals."}
+                  </p>
+                ) : (
+                  summaries.map((summary, position) => (
+                    <div
+                      key={summary.id}
+                      className={
+                        summary.id === selectedId
+                          ? "proposal-row is-selected"
+                          : "proposal-row"
+                      }
+                    >
+                      <button
+                        type="button"
+                        data-testid="proposal-item"
+                        data-proposal-id={summary.id}
+                        aria-label={`Inspect proposal ${position + 1}: ${summary.title}`}
+                        aria-pressed={summary.id === selectedId}
+                        className="proposal-row-main"
+                        onClick={() => setSelectedId(summary.id)}
+                      >
+                        <span className="proposal-row-index">
+                          {position + 1}
+                        </span>
+                        <span className="proposal-row-title">
+                          {summary.title}
+                        </span>
+                      </button>
+                      <div
+                        className="proposal-row-decisions"
+                        role="group"
+                        aria-label={`Decide change ${position + 1}: ${summary.title}`}
+                      >
+                        {DECISIONS.map(({ action, label, description }) => (
+                          <button
+                            key={action}
+                            type="button"
+                            title={`${label} — ${description}`}
+                            aria-label={`${label} change ${position + 1}: ${summary.title}`}
+                            data-testid={`${action}-proposal`}
+                            className="decision-button"
+                            onClick={() => decideProposal(summary.id, action)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
-              <div>
-                <h4>If all changes are accepted</h4>
-                <p className="helper">A preview, not a decision</p>
-                <pre data-testid="all-accepted-preview">
-                  {evidence.allAccepted.join("\n")}
-                </pre>
-              </div>
-            </div>
-          )}
-        </section>
-        {evidence !== null && (
-          <details className="technical-details">
-            <summary>
-              Developer details · proposal data, outcomes & export
-            </summary>
-            <p>
-              Inspect the package’s current pending proposals and export a
-              native review document. Resolved proposals leave no resolution
-              history.
-            </p>
-            <div data-testid="selected-details">
-              {!selectedActive || inspection === null ? (
-                <p>No proposal selected.</p>
-              ) : inspection.status === "ready" ? (
-                <pre>{JSON.stringify(inspection.value, null, 2)}</pre>
-              ) : (
-                <p>
-                  Inspection refused / {inspection.code}: {inspection.message}
+              {proposals.length > 0 && (
+                <p className="helper">
+                  Accept keeps the change. Reject declines it. Remove withdraws
+                  your proposal.
                 </p>
               )}
-            </div>
+            </section>
+          </div>
+        </div>
+        <section
+          className="api-output"
+          data-testid="api-output"
+          aria-labelledby="api-output-heading"
+        >
+          <h3 id="api-output-heading">API output</h3>
+          <p>
+            Proposal data and operation results update as you edit. Document
+            JSON is a captured snapshot.
+          </p>
+          <div className="inspection-grid">
+            <section aria-label="Proposal inspection">
+              <h4 className="api-output-toolbar">Selected proposal</h4>
+              <div data-testid="selected-details">
+                {!selectedActive || inspection === null ? (
+                  <p>Select a proposal row to inspect its data.</p>
+                ) : inspection.status === "ready" ? (
+                  <pre>{JSON.stringify(inspection.value, null, 2)}</pre>
+                ) : (
+                  <p>
+                    Inspection refused / {inspection.code}: {inspection.message}
+                  </p>
+                )}
+              </div>
+            </section>
+            <section aria-labelledby="snapshot-heading">
+              <div className="api-output-toolbar">
+                <h4 id="snapshot-heading">Review document JSON</h4>
+                <button
+                  type="button"
+                  data-testid="capture-document"
+                  disabled={isComposing}
+                  onClick={captureDocument}
+                >
+                  {documentSnapshot === null
+                    ? "Capture snapshot"
+                    : "Update snapshot"}
+                </button>
+              </div>
+              {documentSnapshot === null && (
+                <p>Capture accepted content and pending proposals as JSON.</p>
+              )}
+              {isComposing && (
+                <p>Finish composing text before capturing the document.</p>
+              )}
+              {snapshotError !== null && <p role="alert">{snapshotError}</p>}
+              {documentSnapshot !== null &&
+                documentSnapshot.version !== docVersion && (
+                  <p
+                    className="freshness-message"
+                    data-testid="snapshot-feedback"
+                    aria-live="polite"
+                  >
+                    This snapshot is out of date. Update it to include your
+                    latest changes.
+                  </p>
+                )}
+              {documentSnapshot !== null && (
+                <pre data-testid="native-export">{documentSnapshot.json}</pre>
+              )}
+            </section>
+          </div>
+          <section className="api-operation" aria-label="Operation result">
+            <h4>Latest operation result</h4>
             <div data-testid="outcome-pane">
               <p>
-                Latest outcome:{" "}
                 {outcome === null
-                  ? "none yet — run the scenario actions above"
+                  ? "No operation reported yet. Make an edit or a decision."
                   : describeOutcome(outcome)}
               </p>
-              <p>Reported outcomes this baseline: {outcomeCount}</p>
+              <p>Operations reported in this example: {outcomeCount}</p>
               {normalization !== null && (
                 <p data-testid="normalization-report">
-                  normalization: {normalization}
+                  Clipboard normalization: {normalization}
                 </p>
               )}
             </div>
-            <h4>Native export</h4>
-            <pre data-testid="native-export">{evidence.nativeJson}</pre>
-            <p data-testid="capability-label">
-              Capability demo — non-normative, not a host UI pattern
-            </p>
-          </details>
-        )}
-        <div className="lesson-next">
-          <span>
-            {index === SCENARIOS.length - 1
-              ? "You’ve reached the last example. Revisit any capability or try your own edits."
-              : "Ready to explore another capability?"}
-          </span>
-          {nextScenario !== undefined && (
-            <button
-              type="button"
-              onClick={() => {
-                loadScenario(nextScenario.id);
-                document
-                  .getElementById("try-it-live")
-                  ?.scrollIntoView({ block: "start" });
-              }}
-            >
-              Next: {nextScenario.label} →
-            </button>
-          )}
-        </div>
+          </section>
+        </section>
       </main>
     </div>
   );
