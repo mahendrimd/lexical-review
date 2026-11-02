@@ -1,5 +1,12 @@
 # Repository Guidelines
 
+## Security and privacy
+
+- Access only the files and credentials needed for the task. Use configured authentication without printing or copying secret values into chat, repository files, or external services.
+- Share only the evidence needed for the authorized task. Permission to publish findings does not authorize disclosure of credentials, private environment details, or unrelated local data.
+- Before committing or sending content to an external service, inspect the complete payload, including commands, logs, stack traces, screenshots, and attachments. Remove secrets and private metadata while preserving the evidence needed to reproduce the result.
+- Make shared references portable: use repository URLs with exact tags/commits and repository-relative file paths. Describe local setup with generic relative paths or placeholders such as `<checkout>` and `<worktree>`; relative paths must also omit private directory names. Keep machine-specific absolute paths in local commands and chat where needed for navigation or permission requests.
+
 ## Lexical work
 
 For Lexical source inspection, API questions, implementation, debugging, upgrades, peer-range changes, compatibility baselines, or package semver decisions, use `.agents/skills/lexical-compatibility/SKILL.md`.

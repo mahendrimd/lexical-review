@@ -1,6 +1,8 @@
 # Issue tracker: GitHub
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Apply the [security and privacy rules](../../AGENTS.md#security-and-privacy) to
+issue and PR bodies, comments, and attachments before sending them to GitHub.
 
 ## Conventions
 
