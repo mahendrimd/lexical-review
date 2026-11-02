@@ -103,8 +103,8 @@ test -z "$(git -C "$lexical_worktree" status --porcelain)"
 
 The block must succeed. Compare `origin` with the expected upstream remote
 before using or fetching the clone. Verify the Lexical package version in the
-worktree, and record the exact tag, commit, absolute paths, and remote in
-decision mode.
+worktree. In decision mode, retain the verified source URL, exact tag and
+commit, and source/worktree layout for the investigation record.
 
 If the source repository, exact tag, or required worktree is missing or points
 to a different commit, stop before version-specific inspection. State the exact
@@ -153,7 +153,11 @@ from reference-mode findings alone.
 ### 1. Establish the investigation record
 
 Use the existing issue named by the task. If none is named, stop at the GitHub
-write gate. The initial record should include:
+write gate. Record reproducible source identities and a portable setup layout
+under the repository's [security and privacy rules](../../../AGENTS.md#security-and-privacy).
+Use generic relative paths such as `../lexical-worktrees/lexical-vX.Y.Z/`, or
+`<worktree>` when the actual layout contains private directory names. The
+initial record should include:
 
 ```markdown
 ## Lexical compatibility investigation
@@ -164,8 +168,9 @@ write gate. The initial record should include:
 - Candidate exact versions:
 - Lexical packages checked:
 - Node / pnpm:
-- Source repository:
-- Worktrees:
+- Source repository URL:
+- Source tags and commits:
+- Source/worktree layout (generic relative paths or placeholders):
 
 ### Decision
 
@@ -275,7 +280,8 @@ The issue must record:
 
 - accepted and rejected exact versions or ranges;
 - release tags and linked pull requests reviewed;
-- source repository, exact tags, worktree paths, and inspected tests;
+- source repository URL, exact tags and commits, portable source/worktree
+  layout, and repository-relative inspected test paths;
 - compilation, consumer, unit, and browser commands with results;
 - affected or cleared lexical-review mechanisms;
 - known untested surfaces; and
