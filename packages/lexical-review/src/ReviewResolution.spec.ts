@@ -14,10 +14,10 @@
  */
 import {
   $getRoot,
+  $isParagraphNode,
   $getSelection,
   $isRangeSelection,
   createEditor,
-  type ParagraphNode,
   TextNode,
 } from "lexical";
 import {
@@ -354,7 +354,7 @@ it("text-only batch refuses invalid unrelated structure without mutation", () =>
     ]),
   ]);
   update(() => {
-    $getRoot().getLastChildOrThrow<ParagraphNode>().setIndent(1);
+    $getRoot().getChildren().filter($isParagraphNode).at(-1)!.setIndent(1);
   });
   const before = snapshot();
   update(() =>
@@ -491,7 +491,8 @@ it("resolves a normalized fragment under its current insertion kind", () => {
   });
   update(() => {
     const parts = $getRoot()
-      .getChildren<ParagraphNode>()
+      .getChildren()
+      .filter($isParagraphNode)
       .flatMap((node) =>
         node
           .getChildren()

@@ -17,10 +17,10 @@
  */
 import {
   $getRoot,
+  $isParagraphNode,
   $getSelection,
   $isRangeSelection,
   createEditor,
-  type ParagraphNode,
   type TextNode,
 } from "lexical";
 import {
@@ -477,7 +477,8 @@ describe("reviewer previews", () => {
     ]);
     update(() => {
       $getRoot()
-        .getChildren<ParagraphNode>()[1]!
+        .getChildren()
+        .filter($isParagraphNode)[1]!
         .append($createReviewBoundaryNode("z", "merge", 0, 0));
     });
     const before = snapshot();
@@ -502,7 +503,8 @@ describe("reviewer previews", () => {
     ]);
     update(() => {
       $getRoot()
-        .getChildren<ParagraphNode>()[1]!
+        .getChildren()
+        .filter($isParagraphNode)[1]!
         .append($createReviewBoundaryNode("z", "merge", 0, 0));
     });
     const before = snapshot();
@@ -577,7 +579,7 @@ describe("reviewer resolution consequences", () => {
       expect($splitReviewParagraph(id("s")).status).toBe("changed");
     });
     update(() => {
-      $getRoot().getChildren<ParagraphNode>()[3]!.select(0, 0);
+      $getRoot().getChildren().filter($isParagraphNode)[3]!.select(0, 0);
       expect($mergeReviewParagraph(true, id("m")).status).toBe("changed");
     });
     read(() => {

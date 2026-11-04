@@ -8,7 +8,6 @@ import {
   type ParagraphNode,
   type PointType,
   type RangeSelection,
-  type TextNode,
 } from "lexical";
 import {
   $createReviewFragmentNode,
@@ -84,10 +83,10 @@ export function inspectFragment(proposalId: string): Preparation<Group> {
 function payload(group: Group): ReviewFragment {
   return group.wrappers.map((node) => ({
     emptyFormat: node.getEmptyFormat(),
-    runs: node.getChildren<TextNode>().map((text) => ({
-      text: text.getTextContent(),
-      format: text.getFormat(),
-    })),
+    runs: node.getChildren().map((text) => {
+      if (!$isTextNode(text)) throw new Error("Expected fragment text.");
+      return { text: text.getTextContent(), format: text.getFormat() };
+    }),
   }));
 }
 export function inspectFragmentProposal(
@@ -157,7 +156,8 @@ function selectOffset(
   point?: PointType,
 ): void {
   for (const wrapper of wrappers) {
-    for (const child of wrapper.getChildren<TextNode>()) {
+    for (const child of wrapper.getChildren()) {
+      if (!$isTextNode(child)) throw new Error("Expected fragment text.");
       if (offset <= child.getTextContentSize()) {
         if (point) point.set(child.getKey(), offset, "text");
         else child.select(offset, offset);
@@ -554,7 +554,7 @@ function inspectInwardFragmentCaret(
     return null;
   // Faced edge as a fragment-local point so offsetInGroup keeps the one
   // offset accounting both paths share; only key/offset/type are read.
-  const texts = faced.getChildren<TextNode>();
+  const texts = faced.getChildren();
   const edge = backward ? texts.at(-1) : texts[0];
   const point =
     edge === undefined

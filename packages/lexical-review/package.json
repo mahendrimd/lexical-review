@@ -36,16 +36,16 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@lexical/clipboard": ">=0.47.0 <0.53.0",
-    "@lexical/extension": ">=0.47.0 <0.53.0",
-    "@lexical/utils": ">=0.47.0 <0.53.0",
-    "lexical": ">=0.47.0 <0.53.0"
+    "@lexical/clipboard": ">=0.47.0 <0.54.0",
+    "@lexical/extension": ">=0.47.0 <0.54.0",
+    "@lexical/utils": ">=0.47.0 <0.54.0",
+    "lexical": ">=0.47.0 <0.54.0"
   },
   "devDependencies": {
-    "@lexical/clipboard": "0.52.0",
-    "@lexical/extension": "0.52.0",
-    "@lexical/utils": "0.52.0",
-    "lexical": "0.52.0",
+    "@lexical/clipboard": "0.53.0",
+    "@lexical/extension": "0.53.0",
+    "@lexical/utils": "0.53.0",
+    "lexical": "0.53.0",
     "rolldown": "^1.2.12"
   }
 }

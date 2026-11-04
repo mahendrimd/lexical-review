@@ -162,11 +162,9 @@ function hasMerge(node: LexicalNode | null): boolean {
   );
 }
 function hasSplit(node: LexicalNode | null): boolean {
-  return (
-    isRootParagraph(node) &&
-    $isReviewBoundaryNode(node.getFirstChild()) &&
-    node.getFirstChild<ReviewBoundaryNode>()!.getKind() === "split"
-  );
+  if (!isRootParagraph(node)) return false;
+  const first = node.getFirstChild();
+  return $isReviewBoundaryNode(first) && first.getKind() === "split";
 }
 
 function sideFormat(paragraph: ParagraphNode, side: "left" | "right"): number {
@@ -265,11 +263,9 @@ export function $mergeReviewParagraph(
       "unsupported-target",
       "There is no adjacent paragraph to merge.",
     );
-  if (hasSplit(right))
-    return resolveStructure(
-      right.getFirstChild<ReviewBoundaryNode>()!.getProposalId(),
-      false,
-    );
+  const first = right.getFirstChild();
+  if ($isReviewBoundaryNode(first) && first.getKind() === "split")
+    return resolveStructure(first.getProposalId(), false);
   if ([left, right].some((p) => p.getChildren().some($isReviewFragmentNode)))
     return refusal(
       "unsafe-proposal-intersection",
@@ -371,7 +367,9 @@ export function resolveStructure(
   const found = inspectBoundary(proposalId);
   if (found.status !== "ready") return found;
   const marker = found.value;
-  const parent = marker.getParentOrThrow<ParagraphNode>();
+  const parent = marker.getParentOrThrow();
+  if (!isRootParagraph(parent))
+    return refusal("invalid-structural-target", "Expected a root paragraph.");
   const index = marker.getIndexWithinParent();
   if (accept) {
     const restore = retainSelection((key, offset) =>
@@ -382,7 +380,9 @@ export function resolveStructure(
     marker.remove();
     restore();
   } else if (marker.getKind() === "split") {
-    const left = parent.getPreviousSibling<ParagraphNode>()!;
+    const left = parent.getPreviousSibling();
+    if (!isRootParagraph(left))
+      return refusal("invalid-structural-target", "Expected a left paragraph.");
     const count = left.getChildrenSize();
     const removedIndex = parent.getIndexWithinParent();
     const restore = retainSelection((key, offset) =>

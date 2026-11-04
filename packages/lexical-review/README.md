@@ -11,10 +11,10 @@ For supported editing behavior, see the
 
 ```bash
 npm install lexical-review \
-  'lexical@>=0.47.0 <0.53.0' \
-  '@lexical/clipboard@>=0.47.0 <0.53.0' \
-  '@lexical/extension@>=0.47.0 <0.53.0' \
-  '@lexical/utils@>=0.47.0 <0.53.0'
+  'lexical@>=0.47.0 <0.54.0' \
+  '@lexical/clipboard@>=0.47.0 <0.54.0' \
+  '@lexical/extension@>=0.47.0 <0.54.0' \
+  '@lexical/utils@>=0.47.0 <0.54.0'
 ```
 
 Install all four Lexical peers at the same version within the declared range.
