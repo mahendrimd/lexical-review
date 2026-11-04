@@ -22,7 +22,7 @@
     "build": "node build.mjs"
   },
   "dependencies": {
-    "lexical-review": "workspace:3.0.0"
+    "lexical-review": "workspace:3.0.1"
   },
   "devDependencies": {
     "lexical": "0.53.0"
