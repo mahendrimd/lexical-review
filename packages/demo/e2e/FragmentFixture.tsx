@@ -6,7 +6,7 @@ import {
   $getSelection,
   $isRangeSelection,
   createEditor,
-  type ParagraphNode,
+  $isParagraphNode,
 } from "lexical";
 import {
   $insertReviewFragment,
@@ -82,7 +82,8 @@ export function FragmentFixture() {
         editor.update(
           () => {
             const parts = $getRoot()
-              .getChildren<ParagraphNode>()
+              .getChildren()
+              .filter($isParagraphNode)
               .flatMap((p) =>
                 p.getChildren().filter((n) => n instanceof ReviewFragmentNode),
               );

@@ -1095,11 +1095,9 @@ export type FragmentSelection = {
 
 export function fragmentAtPoint(point: PointType): ReviewFragmentNode | null {
   const node = point.getNode();
-  return $isReviewFragmentNode(node)
-    ? node
-    : $isReviewFragmentNode(node.getParent())
-      ? node.getParent<ReviewFragmentNode>()
-      : null;
+  if ($isReviewFragmentNode(node)) return node;
+  const parent = node.getParent();
+  return $isReviewFragmentNode(parent) ? parent : null;
 }
 
 export function offsetInGroup(
@@ -1185,13 +1183,12 @@ export function inspectStructuralPosition(): Preparation<StructuralPosition> {
   if (point.association === "accepted" && !point.node) {
     const left = point.paragraph.getChildAtIndex(point.childIndex - 1);
     const right = point.paragraph.getChildAtIndex(point.childIndex);
+    const nextParagraph = point.paragraph.getNextSibling();
     if (
       ($isReviewFragmentNode(right) && right.startsParagraph()) ||
       ($isReviewFragmentNode(left) &&
-        isRootParagraph(point.paragraph.getNextSibling()) &&
-        $isReviewFragmentNode(
-          point.paragraph.getNextSibling<ParagraphNode>()!.getFirstChild(),
-        ))
+        isRootParagraph(nextParagraph) &&
+        $isReviewFragmentNode(nextParagraph.getFirstChild()))
     )
       return refusal(
         "unsafe-proposal-intersection",

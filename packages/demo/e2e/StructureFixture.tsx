@@ -7,7 +7,7 @@ import {
   $isRangeSelection,
   createEditor,
   INSERT_PARAGRAPH_COMMAND,
-  type ParagraphNode,
+  $isParagraphNode,
 } from "lexical";
 import {
   $splitReviewParagraph,
@@ -71,7 +71,12 @@ export function StructureFixture() {
     window.__structureFixture = {
       paragraph(index) {
         editor.update(
-          () => $getRoot().getChildAtIndex<ParagraphNode>(index)!.selectEnd(),
+          () => {
+            const paragraph = $getRoot().getChildAtIndex(index);
+            if (!$isParagraphNode(paragraph))
+              throw new Error("Expected a paragraph.");
+            paragraph.selectEnd();
+          },
           { discrete: true },
         );
       },
@@ -84,7 +89,8 @@ export function StructureFixture() {
       marker(side) {
         editor.update(
           () => {
-            const p = $getRoot().getFirstChildOrThrow<ParagraphNode>();
+            const p = $getRoot().getFirstChildOrThrow();
+            if (!$isParagraphNode(p)) throw new Error("Expected a paragraph.");
             const marker = p
               .getChildren()
               .find((node) => node instanceof ReviewBoundaryNode)!;

@@ -1,4 +1,4 @@
-import { $getRoot, createEditor, type ParagraphNode } from "lexical";
+import { $getRoot, createEditor } from "lexical";
 import {
   ReviewBoundaryNode,
   $isReviewBoundaryNode,
@@ -9,6 +9,7 @@ import {
   ReviewDeletionNode,
   ReviewFormattingNode,
   isReviewElementNode,
+  isRootParagraph,
 } from "./ReviewNodes";
 import { $resolveReviewProposals } from "./ReviewResolution";
 import { openReviewSession } from "./ReviewSession";
@@ -48,13 +49,15 @@ export function createReviewPreview(
     editor.update(
       () => {
         const ids = $getRoot()
-          .getChildren<ParagraphNode>()
-          .flatMap((p) =>
-            p
+          .getChildren()
+          .flatMap((p) => {
+            if (!isRootParagraph(p))
+              throw new Error("Expected a root paragraph.");
+            return p
               .getChildren()
               .filter((n) => isReviewElementNode(n) || $isReviewBoundaryNode(n))
-              .map((n) => n.getProposalId()),
-          );
+              .map((n) => n.getProposalId());
+          });
         const result = $resolveReviewProposals(
           ids,
           mode === "all-accepted" ? "accept" : "reject",

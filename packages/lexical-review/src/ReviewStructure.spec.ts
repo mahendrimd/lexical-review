@@ -1,12 +1,12 @@
 import {
   $getRoot,
+  $isParagraphNode,
   $getSelection,
   $isRangeSelection,
   createEditor,
   BEFORE_INPUT_COMMAND,
   INSERT_PARAGRAPH_COMMAND,
   KEY_ENTER_COMMAND,
-  type ParagraphNode,
 } from "lexical";
 import {
   $splitReviewParagraph,
@@ -70,7 +70,7 @@ function setup(paragraphs = [paragraph([text("abcdef")])]) {
   return { editor, input, session: opened.value, update, read, snapshot };
 }
 const id = (value: string) => ({ proposalIdFactory: () => value });
-const paragraphs = () => $getRoot().getChildren<ParagraphNode>();
+const paragraphs = () => $getRoot().getChildren().filter($isParagraphNode);
 const contents = () => paragraphs().map((node) => node.getTextContent());
 
 it.each(["accept", "reject", "remove"] as const)(

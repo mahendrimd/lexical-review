@@ -35,6 +35,7 @@ import {
   $createParagraphNode,
   $createTextNode,
   $getRoot,
+  $isParagraphNode,
   $getSelection,
   $isRangeSelection,
   createEditor,
@@ -280,7 +281,9 @@ describe("compatibility matrix: refusals preserve state and selection", () => {
         reviewNode("review-insertion", "b", [text("y")]),
       ]),
     ]);
-    update(() => $getRoot().getFirstChildOrThrow<ParagraphNode>().select(1, 1));
+    update(() =>
+      $getRoot().getChildren().filter($isParagraphNode)[0]!.select(1, 1),
+    );
     update(() =>
       expect($insertReviewText("z", id("c"))).toMatchObject({
         status: "changed",

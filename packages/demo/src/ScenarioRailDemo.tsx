@@ -15,7 +15,7 @@ import {
   INSERT_PARAGRAPH_COMMAND,
   PASTE_COMMAND,
   type LexicalEditor,
-  type ParagraphNode,
+  $isParagraphNode,
 } from "lexical";
 import {
   $deleteReviewText,
@@ -490,7 +490,8 @@ export default function ScenarioRailDemo({
   const mergeAtPinnedBoundary = useCallback(() => {
     editor.update(
       () => {
-        $getRoot().getChildren<ParagraphNode>()[1]?.select(0, 0);
+        const paragraph = $getRoot().getChildren()[1];
+        if ($isParagraphNode(paragraph)) paragraph.select(0, 0);
       },
       { discrete: true },
     );

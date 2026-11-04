@@ -9,15 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@lexical/extension": "0.52.0",
-    "@lexical/react": "0.52.0",
-    "lexical": "0.52.0",
+    "@lexical/extension": "0.53.0",
+    "@lexical/react": "0.53.0",
+    "lexical": "0.53.0",
     "lexical-review": "workspace:3.0.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "@lexical/history": "0.52.0",
+    "@lexical/history": "0.53.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "typescript": "7.0.2",

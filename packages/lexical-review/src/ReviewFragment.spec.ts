@@ -1,12 +1,13 @@
 import {
+  $createTextNode,
   $getRoot,
+  $isParagraphNode,
   $getSelection,
   $isRangeSelection,
   createEditor,
-  type ParagraphNode,
-  type TextNode,
 } from "lexical";
 import {
+  $createReviewInsertionNode,
   $insertReviewFragment,
   $inspectReviewProposal,
   $resolveReviewProposal,
@@ -45,7 +46,8 @@ const contents = () =>
     .map((p) => p.getTextContent());
 const parts = () =>
   $getRoot()
-    .getChildren<ParagraphNode>()
+    .getChildren()
+    .filter($isParagraphNode)
     .flatMap((p) =>
       p.getChildren().filter((n) => n instanceof ReviewFragmentNode),
     );
@@ -88,9 +90,9 @@ function setup(values = ["AB"]) {
     });
   const insert = (value = "x\ny", offset = 1) =>
     update(() => {
-      const first = $getRoot().getFirstChildOrThrow<ParagraphNode>();
+      const first = $getRoot().getChildren().filter($isParagraphNode)[0]!;
       if (first.getFirstChild())
-        first.getFirstChildOrThrow<TextNode>().select(offset, offset);
+        first.getAllTextNodes()[0]!.select(offset, offset);
       else first.select();
       expect($insertReviewFragment(fragment(value), id("f")).status).toBe(
         "changed",
@@ -152,7 +154,7 @@ it("paragraph-end paste leaves the next accepted paragraph separate", () => {
 it("empty paragraphs and non-BMP formatting survive", () => {
   const s = setup([""]);
   s.update(() => {
-    $getRoot().getFirstChildOrThrow<ParagraphNode>().select();
+    $getRoot().getChildren().filter($isParagraphNode)[0]!.select();
     expect($insertReviewFragment(fragment("\n😀\n", 3), id("f")).status).toBe(
       "changed",
     );
@@ -175,7 +177,7 @@ it("corrects text, internal structure, replacement and further paste under one i
   });
   s.update(() => expect($deleteReviewText(true).status).toBe("changed"));
   s.update(() => {
-    parts()[1]!.getFirstChildOrThrow<TextNode>().select(0, 2);
+    parts()[1]!.getAllTextNodes()[0]!.select(0, 2);
     expect($replaceReviewText("q").status).toBe("changed");
   });
   s.update(() =>
@@ -235,7 +237,7 @@ it("formats a cross-paragraph selection locally and preserves orientation", () =
   s.insert("xy\nzz");
   s.update(() => {
     const p = parts();
-    const sel = p[1]!.getFirstChildOrThrow<TextNode>().select(1, 1);
+    const sel = p[1]!.getAllTextNodes()[0]!.select(1, 1);
     sel.focus.set(p[0]!.getFirstChildOrThrow().getKey(), 1, "text");
     expect($setReviewFormatting({ bold: true }).status).toBe("changed");
     expect(
@@ -444,6 +446,22 @@ it("refuses malformed native content and active composition atomically", () => {
   mock.mockRestore();
 });
 
+it("rejects a non-text fragment child without changing document or selection", () => {
+  const s = setup();
+  s.insert();
+  const before = s.snapshot();
+  s.update(() => {
+    expect(() =>
+      parts()[0]!.append(
+        $createReviewInsertionNode("nested").append($createTextNode("invalid")),
+      ),
+    ).toThrow("Review proposal wrappers support text children only.");
+  });
+  expect(s.snapshot()).toEqual(before);
+  s.read(() => expect($inspectReviewProposal("f").status).toBe("unchanged"));
+  expect(s.snapshot()).toEqual(before);
+});
+
 it("previews current fragment content without changing live state or input", () => {
   const s = setup();
   s.insert();
@@ -485,16 +503,14 @@ it("empty fragment formatting inherits the insertion target unless explicitly su
     expect($insertReviewText("z").status).toBe("changed");
   });
   s.read(() =>
-    expect(parts().at(-1)!.getFirstChildOrThrow<TextNode>().getFormat()).toBe(
-      2,
-    ),
+    expect(parts().at(-1)!.getAllTextNodes()[0]!.getFormat()).toBe(2),
   );
 });
 it("batch resolution refuses invalid unrelated structure before resolving any fragment", () => {
   const s = setup();
   s.insert();
   s.update(() => {
-    $getRoot().getLastChildOrThrow<ParagraphNode>().setIndent(1);
+    $getRoot().getChildren().filter($isParagraphNode).at(-1)!.setIndent(1);
   });
   const before = s.snapshot();
   s.update(() =>

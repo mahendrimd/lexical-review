@@ -1,9 +1,4 @@
-import {
-  $getRoot,
-  $isTextNode,
-  type ParagraphNode,
-  type TextNode,
-} from "lexical";
+import { $getRoot, $isTextNode, type TextNode } from "lexical";
 import {
   $isReviewBoundaryNode,
   type ReviewBoundaryNode,
@@ -385,7 +380,7 @@ function buildPreviewParagraphs(): {
 } {
   const accepted: string[] = [];
   const allAccepted: string[] = [];
-  for (const paragraph of $getRoot().getChildren<ParagraphNode>()) {
+  for (const paragraph of $getRoot().getChildren()) {
     if (!isRootParagraph(paragraph)) continue;
     const children = paragraph.getChildren();
     const first = children[0];
