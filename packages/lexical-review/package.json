@@ -46,6 +46,6 @@
     "@lexical/extension": "0.53.0",
     "@lexical/utils": "0.53.0",
     "lexical": "0.53.0",
-    "rolldown": "^1.2.12"
+    "rolldown": "^1.2.16"
   }
 }

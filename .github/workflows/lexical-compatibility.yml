@@ -1,6 +1,8 @@
 name: Lexical compatibility
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - ".github/workflows/lexical-compatibility.yml"
@@ -10,9 +12,8 @@ on:
       - ".prettierrc"
       - ".oxlintrc.json"
       - "package.json"
-      - "packages/demo/package.json"
-      - "packages/demo/e2e/**"
-      - "packages/lexical-review/**"
+      - "packages/**"
+      - "nx.json"
       - "playwright.config.ts"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -32,6 +33,7 @@ jobs:
   resolve:
     name: Resolve compatibility matrix
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     outputs:
       unitMatrix: ${{ steps.resolve.outputs.unitMatrix }}
       e2eMatrix: ${{ steps.resolve.outputs.e2eMatrix }}
@@ -40,7 +42,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup pnpm and Node.js
-        uses: pnpm/setup@v2
+        uses: pnpm/setup@v3
         with:
           runtime: node@^24.15.0
           cache: true
@@ -70,7 +72,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup pnpm and Node.js
-        uses: pnpm/setup@v2
+        uses: pnpm/setup@v3
         with:
           runtime: node@^24.15.0
           cache: true
@@ -94,7 +96,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup pnpm and Node.js
-        uses: pnpm/setup@v2
+        uses: pnpm/setup@v3
         with:
           runtime: node@^24.15.0
           cache: true
